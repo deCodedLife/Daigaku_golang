@@ -8,280 +8,1008 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gorilla/mux"
 )
 
-type DataBase struct {
-	user     string
-	pass     string
-	database string
+type dataBase struct {
+	user     string //`json:"user"`
+	pass     string //`json:"pass"`
+	database string //`json:"database"`
 }
 
-type User struct {
-	id         int
-	pass       string
-	name       string
-	status     string
-	group      string
-	is_curator string
-	profile    string
-	curatorTag string
+type userNode struct {
+	id         int    //`json:"id"`
+	pass       string //`json:"pass"`
+	name       string //`json:"name"`
+	status     string //`json:"status"`
+	group      string //`json:"group"`
+	isCurator  string //`json:"is_curator"`
+	profile    string //`json:"profile"`
+	curatorTag string //`json:"curatorTag"`
 }
 
-type Structure struct {
-	name  string
-	value string
+type accessForm struct {
+	Name string `json:"name"`
+	Pass string `json:"pass"`
+}
+
+type GroupForm struct {
+	Name     string `json:"name"`
+	Token    string `json:"token"`
+	Operator string `json:"operator"`
+}
+
+type ImageForm struct {
+	Tags  string `json:"tag"`
+	Path  string `json:"path"`
+	Token string `json:"token"`
+}
+
+type MessageForm struct {
+	Pick    string `json:"pick"`
+	Token   string `json:"token"`
+	Message string `json:"message"`
+}
+
+type TagForm struct {
+	Tags    string `json:"tag"`
+	Group   string `json:"group"`
+	Token   string `json:"token"`
+	Curator string `json:"curator"`
+}
+
+type TaskForm struct {
+	Tags   string `json:"tag"`
+	Task   string `json:"task"`
+	Group  string `json:"group"`
+	Token  string `json:"token"`
+	DateTo string `json:"date_to"`
+}
+
+type applyTaskForm struct {
+	ID    string `json:"id"`
+	Token string `json:"token"`
+}
+
+type changeGroupForm struct {
+	UserName string `json:"username"`
+	Group    string `json:"group"`
+	Token    string `json:"token"`
+}
+
+type dGroupForm struct {
+	Group string `json:"groupname"`
+	Token string `json:"token"`
+}
+
+type dImage struct {
+	Path  string `json:"path"`
+	Token string `json:"token"`
+}
+
+type dMessage struct {
+	Message string `json:"message"`
+	Pick    string `json:"pick"`
+	Date    string `json:"date"`
+	Token   string `json:"token"`
+}
+
+type dTag struct {
+	Tags  string `json:"tag"`
+	Group string `json:"group"`
+	Token string `json:"token"`
+}
+
+type dTask struct {
+	ID    string `json:"id"`
+	Token string `json:"token"`
+}
+
+type dUser struct {
+	User  string `json:"username"`
+	Token string `json:"token"`
+}
+
+type gCuratorTagForm struct {
+	Tags  string `json:"tag"`
+	Token string `json:"token"`
+}
+
+type gImages struct {
+	Tags  string `json:"tag"`
+	Date  string `json:"date"`
+	Token string `json:"token"`
+}
+
+type imageNode struct {
+	id    int
+	group string
+	tag   string
+	date  string
+	path  string
+}
+
+type gMessages struct {
+	Token string `json:"token"`
+}
+
+type Message struct {
+	id       int
+	group    string
+	pick     int
+	message  string
+	operator string
+	date     string
+}
+
+type gTags struct {
+	Group string `json:"group"`
+	Token string `json:"token"`
+}
+
+type Tag struct {
+	id     int
+	groups string
+	tag    string
+	static int
+}
+
+type gGroup struct {
+	Token string `json:"token"`
+}
+
+type Group struct {
+	id       int
+	name     string
+	operator string
+	curator  string
+}
+
+type gProfile struct {
+	Token string `json:"token"`
+}
+
+type gUsers struct {
+	Types string `json:"type"`
+	Group string `json:"group"`
+}
+
+type gCurrentUser struct {
+	User  string `json:"currentUser"`
+	Token string `json:"token"`
+}
+
+type gTasks struct {
+	Self  string `json:"self"`
+	Token string `json:"token"`
+}
+
+type Task struct {
+	id       int
+	group    string
+	tag      string
+	task     string
+	attached string
+	dateTo   string
+	operator string
+	finished int
 }
 
 var db *sql.DB
+var localimg []os.FileInfo
+var localdir = "/var/www/html/school/img"
+var database = dataBase{"admin", "8895304025Dr", "School"}
 var methods = make(map[string][]string)
-var Database = DataBase{"admin", "8895304025Dr", "School"}
 
-func getArgs(api string) ([]string, error) {
-
-	if len(methods[api]) == 0 {
-		return []string(methods["null"]), errors.New("Неизвестный метод")
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
 	}
-
-	return methods[api], nil
+	return !info.IsDir()
 }
 
-func getAccess(name string, pass string, time string, Writer http.ResponseWriter) error {
-	user := User{}
-	hasher := sha256.New()
-	err := db.QueryRow("select * from "+Database.database+".users where `name` = ?", name).Scan(&user.id, &user.pass, &user.name, &user.status, &user.group, &user.is_curator, &user.profile, &user.curatorTag)
+func createDirectory(dirName string) bool {
+	src, err := os.Stat(dirName)
+
+	if os.IsNotExist(err) {
+		errDir := os.MkdirAll(dirName, 0755)
+		if errDir != nil {
+			panic(err)
+		}
+		return true
+	}
+
+	if src.Mode().IsRegular() {
+		fmt.Println(dirName, "already exist as a file!")
+		return false
+	}
+
+	return false
+}
+
+func checkToken(token string) (userNode, error) {
+
+	var (
+		name string
+		pass string
+		date string
+		err  error
+
+		getTime string
+		decoded []byte
+		splited []string
+	)
+
+	user := userNode{}
+	date = time.Now().Format(time.RFC1123)
+
+	splited = strings.SplitAfter(date, " ")
+	date = splited[0] + splited[1] + splited[2] + splited[3]
+
+	decoded, err = base64.URLEncoding.DecodeString(token)
 	if err != nil {
-		return nil
+		return user, errors.New("Can't decode token")
 	}
-	hasher.Write([]byte(pass))
-	if hex.EncodeToString(hasher.Sum(nil)) != user.pass {
-		fmt.Fprintf(Writer, "Логин или пароль введен неверно")
-		return errors.New("Логин или пароль введен неверно")
+
+	splited = strings.Split(string(decoded), "|")
+	getTime = splited[0]
+
+	pass = splited[1]
+	name = splited[2]
+
+	err = db.QueryRow("select `id`, `pass`, `name`, `status`, `fgroup`, `is_curator`, `profile`, `curatorTag` from School.users where name = ?", name).Scan(&user.id, &user.pass, &user.name, &user.status, &user.group, &user.isCurator, &user.profile, &user.curatorTag)
+	if err != nil {
+		return user, err
 	}
-	baseString := ""
-	baseString = baseString + time + "|" + hex.EncodeToString(hasher.Sum(nil)) + "|" + name
-	fmt.Fprintf(Writer, "%s", base64.URLEncoding.EncodeToString([]byte(baseString)))
-	return nil
+	if getTime != date {
+		return user, errors.New("Токен устарел")
+	}
+	if user.pass != pass {
+		return user, errors.New("Токен не верен")
+	}
+
+	return user, nil
+
 }
-func addGroup(groupname string, operator string, user User, Writer http.ResponseWriter) error {
-	if user.status != "admin" {
-		return errors.New("У вас нет разрешений для этих действий")
+
+func getAccess(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var (
+		name string
+		pass string
+		date string
+		summ string
+		base string
+		user userNode
+		form accessForm
+		hash = sha256.New()
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	name = form.Name
+	pass = form.Pass
+
+	date = time.Now().Format(time.RFC1123)
+	splited := strings.SplitAfter(date, " ")
+	date = splited[0] + splited[1] + splited[2] + splited[3]
+	hash.Write([]byte(pass))
+	summ = hex.EncodeToString(hash.Sum(nil))
+
+	result, _ := db.Query("select `id`, `pass`, `name`, `status`, `fgroup`, `is_curator`, `profile`, `curatorTag` from School.users where name = ?", name)
+	defer result.Close()
+	result.Next()
+	_ = result.Scan(&user.id, &user.pass, &user.name, &user.status, &user.group, &user.isCurator, &user.profile, &user.curatorTag)
+
+	if summ != user.pass {
+		fmt.Println(user.pass, "|", summ, "|", name)
+		fmt.Fprintf(w, "Логин или пароль введен неверно")
+		return
 	}
+
+	base = base64.URLEncoding.EncodeToString([]byte(date + "|" + summ + "|" + name))
+	json.NewEncoder(w).Encode(base)
+}
+
+func addGroup(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err      error
+		token    string
+		group    string
+		form     GroupForm
+		user     userNode
+		operator string // it's name of person
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	token = form.Token
+	group = form.Name
+	operator = form.Operator
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "admin" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
 	if operator != "0" {
-		_, err := db.Query("insert into "+Database.database+".groups (`name`,`operator`,'curator') values (?,?,?)", groupname, user.name, operator)
+		_, err := db.Query("insert into School.groups (`name`,`operator`,'curator') values (?,?,?)", group, user.name, operator)
 		if err != nil {
-			return err
+			json.NewEncoder(w).Encode(err.Error())
+			return
 		}
 	} else {
-		_, err := db.Query("insert into "+Database.database+".groups (`name`,`operator`,'curator') values (?,?,?)", groupname, user.name, operator)
+		_, err := db.Query("insert into School.groups (`name`,`operator`,'curator') values (?,?,?)", group, user.name, operator)
 		if err != nil {
-			return err
+			json.NewEncoder(w).Encode(err.Error())
+			return
 		}
 	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
+
+	json.NewEncoder(w).Encode("succsess")
 }
-func addImage(tag string, path string, image []byte, user User, Writer http.ResponseWriter) error {
-	//data := []Structure{}
-	//node0 := Structure{"tag", tag}
-	//node1 := Structure{"path", path}
-	//return nil
-	return nil
-}
-func addMessage(pick string, message string, date string, user User, Writer http.ResponseWriter) error {
-	if user.status != "updater" {
-		return errors.New("У вас нет разрешений для этих действий")
-	}
-	_, err := db.Query("insert into "+Database.database+".Messages (`group`,`pick`,`message`,`operator`,`date`) values (?,?,?,?,?)", user.group, pick, message, user.name, date)
+
+func addImage(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		token   string
+		image   []byte
+		form    ImageForm
+		user    userNode
+		exist   = false
+		err     error
+		date    string
+		utag    string // User tag. Example: "Информатика"
+		path    string // Image path in filesystem
+		splited []string
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	utag = form.Tags
+	path = form.Path
+	token = form.Token
+
+	user, err = checkToken(token)
 	if err != nil {
-		return err
+		fmt.Fprintf(w, err.Error())
+		return
 	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
+
+	if user.status != "updater" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этого")
+		return
+	}
+
+	image, err = ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	images, err := ioutil.ReadDir(localdir + "/" + user.group + "/")
+	createDirectory(localdir + "/" + user.group + "/")
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	hash := sha256.New()
+	hash.Write([]byte(image))
+	path = hex.EncodeToString(hash.Sum(nil))
+	date = time.Now().Format(time.RFC1123)
+
+	splited = strings.SplitAfter(date, " ")
+	date = splited[0] + splited[1] + splited[2] + splited[3]
+
+	for _, item := range images {
+		if path == item.Name() {
+			exist = true
+		}
+	}
+
+	if exist {
+		json.NewEncoder(w).Encode("Похожий файл уже существует")
+		return
+	}
+	ioutil.WriteFile(localdir+"/"+user.group+"/"+path, image, 0777)
+	log.Println(user.group)
+	_, err = db.Query("insert into School.Images (`groups`,`tag`,`date`,`path`) values (?,?,CURDATE(),?)", user.group, utag, "school/img/"+user.group+"/"+path)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode("succsess")
+
 }
-func addTag(tag string, curator string, group string, user User, Writer http.ResponseWriter) error {
-	if user.status != "admin" {
-		return errors.New("У вас нет разрешений для этих действий")
+
+func addMessage(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err     error
+		pick    string
+		form    MessageForm
+		user    userNode
+		message string
+		token   string
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	pick = form.Pick
+	message = form.Message
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
 	}
+
+	if user.status != "updater" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("insert into School.messages (`groups`,`pick`,`message`,`operator`,`date`) values (?,?,?,?,CURDATE())", user.group, pick, message, user.name)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode("succsess")
+}
+
+func addTag(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err     error
+		tags    string // mean tag. Simple: "Информатика"
+		form    TagForm
+		user    userNode
+		group   string
+		token   string
+		curator string
+	)
+
+	tags = form.Tags
+	group = form.Group
+	token = form.Token
+	curator = form.Curator
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+	}
+
+	if user.status != "admin" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
 	if curator != "0" {
-		_, err := db.Query("update "+Database.database+".users set `curatorTag` = ? where name = ?", tag, curator)
+		_, err := db.Query("update "+database.database+".users set curatorTag = ? where name = ?", tags, curator)
 		if err != nil {
-			return err
+			log.Fatal(err.Error())
+			return
 		}
-		_, err = db.Query("insert into "+Database.database+".tags (`groups`,`tag`,`static`) values (?,?,?)", group, tag, 0)
+		_, err = db.Query("insert into School.tags (groups,tag,static) values (?,?,0)", group, tags)
 		if err != nil {
-			return err
+			log.Fatalf(err.Error())
+			return
 		}
 	} else {
-		_, err := db.Query("insert into "+Database.database+".tags (`groups`,`tag`,`static`) values (?,?,?)", user.group, tag, 0)
+		_, err := db.Query("insert into School.tags (`groups`,`tag`,`static`) VALUES (?,?,0)", group, tags)
 		if err != nil {
-			return err
+			log.Fatal(err.Error())
+			return
 		}
 	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
+	json.NewEncoder(w).Encode("succsess")
+
 }
-func applyTask(id string, user User, Writer http.ResponseWriter) error {
-	if user.status != "curator" {
-		return errors.New("У вас нет разрешений для этих действий")
-	}
-	_, err := db.Query("update "+Database.database+".Tasks set `finished` = 1 where `id` = ?", id)
+
+func addTask(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err    error
+		tags   string // I mean one tag
+		task   string
+		form   TaskForm
+		user   userNode
+		group  string
+		token  string
+		dateTo string
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	tags = form.Tags
+	task = form.Task
+	group = form.Group
+	token = form.Token
+	dateTo = form.DateTo
+
+	user, err = checkToken(token)
 	if err != nil {
-		return err
+		json.NewEncoder(w).Encode(err.Error())
+		return
 	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
+
+	_, err = db.Query("insert into School.Tasks (`groups`,`tag`,`task`,`attached`,`date_to`,`operator`, `finished`) values (?,?,?,\"false\",?,?,0)", group, tags, task, dateTo, user.name)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
 }
-func changeGroup(username string, group string, user User, Writer http.ResponseWriter) error {
-	if user.status != "admin" {
-		return errors.New("У вас нет разрешений для этих действий")
-	}
-	_, err := db.Query("update "+Database.database+".users set fgroup = ? where `name` = ?", group, username)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
-}
-func deleteGroup(groupname string, user User, Writer http.ResponseWriter) error {
-	if user.status != "admin" {
-		return errors.New("У вас нет разрешений для этих действий")
-	}
-	_, err := db.Query("delete * from "+Database.database+".groups where `name` = ?", groupname)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
-}
-func deleteImage(path string, user User, Writer http.ResponseWriter) error {
-	if user.status != "updater" && user.status != "admin" {
-		return errors.New("У вас нет разрешений для этих действий")
-	}
-	_, err := db.Query("delete * from "+Database.database+".Images where `path` = ?", path)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
-}
-func deleteMessage(message string, pick string, date string, user User, Writer http.ResponseWriter) error {
-	if user.status != "updater" {
-		return errors.New("У вас нет разрешений для этих действий")
-	}
-	_, err := db.Query("delete * from "+Database.database+".messages where `message` = ? and pick` = ? and `date = ?", message, pick, message)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
-}
-func deleteTag(tag string, group string, user User, Writer http.ResponseWriter) error {
-	if user.status != "admin" {
-		return errors.New("У вас нет разрешений для этих действий")
-	}
-	_, err := db.Query("delete * from "+Database.database+".tags where `tag` = ? and `group` = ?", tag, group)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
-}
-func deleteTask(id int, user User, Writer http.ResponseWriter) error {
-	if user.status != "curator" {
-		return errors.New("У вас нет разрешений для этих действий")
-	}
-	_, err := db.Query("delete * from "+Database.database+".Tasks where `id` = ?", id)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
-}
-func deleteUser(username string, user User, Writer http.ResponseWriter) error {
-	if user.status != "admin" {
-		return errors.New("У Вас нет ")
-	}
-	_, err := db.Query("delete * from "+Database.database+".users where `name` = ?", username)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(Writer, "succsess")
-	return nil
-} // I'm tired. Realy... Now 4:09 at night, and after few hours i should go to college... I'm fine )
-func getCuratorTag(tag string, user User, Writer http.ResponseWriter) error {
-	user_ := User{}
-	err := db.QueryRow("select * from "+Database.database+".users"+" where curatorTag = ?", tag).Scan(&user_.id, &user_.pass, &user_.name, &user_.status, &user_.group, &user_.is_curator, &user_.profile, &user_.curatorTag)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(Writer, user_.name)
-	return nil
-}
-func getImages(tag string, date string, user User, Writer http.ResponseWriter) error {
-	type Image_ struct {
+
+func applyTask(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
 		id    int
-		group string
-		tag   string
-		date  string
-		path  string
-	}
-	var result *sql.Rows
-	var err error
-	image_ := make(map[string][]map[string]string)
-	image_["images"] = []map[string]string{}
-	if tag == "0" {
-		result, err = db.Query("select * from "+Database.database+".Images where groups = ? and date = ?", user.group, date)
-	} else {
-		result, err = db.Query("select * from "+Database.database+".Images where groups = ? and tag = ?", user.group, tag)
-	}
+		err   error
+		user  userNode
+		form  applyTaskForm
+		token string
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	id, _ = strconv.Atoi(form.ID)
+	token = form.Token
+
+	user, err = checkToken(token)
 	if err != nil {
-		return err
+		json.NewEncoder(w).Encode(err.Error())
+		return
 	}
+
+	if user.status != "curator" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("update School.Tasks set `finished` = 1 where `id` = ?", id)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func changeGroup(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err      error
+		form     changeGroupForm
+		user     userNode
+		group    string
+		token    string
+		username string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	group = form.Group
+	token = form.Token
+	username = form.UserName
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "admin" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("update School.users set fgroup = ? where name = ?", group, username)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func deleteGroup(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err   error
+		form  dGroupForm
+		user  userNode
+		group string
+		token string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	group = form.Group
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "admin" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("delete from School.groups where name = ?", group)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+}
+
+func deleteImage(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err   error
+		path  string
+		form  dImage
+		user  userNode
+		token string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	path = form.Path
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "updater" && user.status != "admin" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("delete from School.Images where path = ?", path)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func deleteMessage(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err     error
+		pick    int
+		form    dMessage
+		user    userNode
+		date    string
+		token   string
+		message string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	pick, _ = strconv.Atoi(form.Pick)
+	date = form.Date
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "updater" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("delete from School.messages where message = ? and pick = ? and date = ?", message, pick, date)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func deleteTag(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err   error
+		tags  string
+		form  dTag
+		user  userNode
+		group string
+		token string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	tags = form.Tags
+	group = form.Group
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "admin" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("delete from School.tags where tag = ? and groups = ?", tags, group)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+}
+
+func deleteTask(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		id    int
+		err   error
+		form  dTask
+		user  userNode
+		token string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	id, _ = strconv.Atoi(form.ID)
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "curator" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("delete from School.Tasks where id = ?", id)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func deleteUser(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err   error
+		name  string
+		form  dUser
+		user  userNode
+		token string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	name = form.User
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "admin" {
+		json.NewEncoder(w).Encode("У Вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("delete from School.users where name = ?", name)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+// I'm tired. Realy... Now 4:09 Thusday at night, and after few hours i should go to college... I'm fine )
+// I'm here. Now 4:00 but now wensday. I can't think normal.
+
+func getCuratorTag(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err   error
+		tags  string
+		form  gCuratorTagForm
+		token string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	tags = form.Tags
+	token = form.Token
+
+	_, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	userObj := userNode{}
+	err = db.QueryRow("select name from School.users where curatorTag = ?", tags).Scan(&userObj.name)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode(userObj.name)
+}
+
+func getImages(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var (
+		err      error
+		tags     string
+		date     string
+		form     gImages
+		user     userNode
+		token    string
+		result   *sql.Rows
+		imageObj = make(map[string][]map[string]string)
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	tags = form.Tags
+	date = form.Date
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if tags == "0" {
+		result, err = db.Query("select * from "+database.database+".Images where groups = ? and date = ?", user.group, date)
+	} else {
+		result, err = db.Query("select * from "+database.database+".Images where groups = ? and tag = ?", user.group, tags)
+	}
+
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
 	for result.Next() {
-		node := Image_{}
+		node := imageNode{}
 		err = result.Scan(&node.id, &node.group, &node.tag, &node.date, &node.path)
 		if err != nil {
-			return err
+			log.Fatal(err.Error())
+			return
 		}
+
 		temp := make(map[string]string)
 		temp["group"] = node.group
 		temp["tag"] = node.tag
 		temp["date"] = node.date
 		temp["image"] = node.path
-		image_["images"] = append(image_["images"], temp)
+		imageObj["images"] = append(imageObj["images"], temp)
 	}
-	print, _ := json.Marshal(image_)
-	fmt.Println(string(print))
-	fmt.Fprintf(Writer, string(print))
-	return nil
+	print, _ := json.Marshal(imageObj)
+	json.NewEncoder(w).Encode(string(print))
+
 }
-func getMessages(user User, Writer http.ResponseWriter) error {
-	type Message struct {
-		id       int
-		group    string
-		pick     int
-		message  string
-		operator string
-		date     string
-	}
-	message := make(map[string][]map[string]string)
-	result, err := db.Query("select * from "+Database.database+".messages where groups = ?", user.group)
+
+func getMessages(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var (
+		err     error
+		form    gMessages
+		user    userNode
+		token   string
+		result  *sql.Rows
+		message = make(map[string][]map[string]string)
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	token = form.Token
+
+	user, err = checkToken(token)
 	if err != nil {
-		return err
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	result, err = db.Query("select * from School.messages where groups = ?", user.group)
+	if err != nil {
+		log.Fatal(err.Error())
 	}
 
 	for result.Next() {
 		node := Message{}
 		err = result.Scan(&node.id, &node.group, &node.pick, &node.message, &node.operator, &node.date)
 		if err != nil {
-			return err
+			log.Fatal(err.Error())
+			return
 		}
+
 		temp := make(map[string]string)
 		temp["id"] = strconv.Itoa(node.id)
 		temp["group"] = node.group
@@ -292,180 +1020,311 @@ func getMessages(user User, Writer http.ResponseWriter) error {
 		message["messages"] = append(message["messages"], temp)
 	}
 	print, _ := json.Marshal(message)
-	fmt.Fprintf(Writer, string(print))
-	return nil
+	json.NewEncoder(w).Encode(string(print))
+
 }
-func getTags(group string, user User, Writer http.ResponseWriter) error {
-	type Tag struct {
-		id     int
-		groups string
-		tag    string
-		static int
+
+func getTags(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "applicaion/json")
+
+	var (
+		err    error
+		tag    = make(map[string][]map[string]string)
+		form   gTags
+		user   userNode
+		group  string
+		token  string
+		result *sql.Rows
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	group = form.Group
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
 	}
-	var result *sql.Rows
-	var err error
-	tag := make(map[string][]map[string]string)
+
 	if user.status != "admin" {
-		return errors.New("У Вас нет разрешений для этих действий")
+		json.NewEncoder(w).Encode("У Вас нет разрешений для этих действий")
+		return
 	}
+
 	if group != "0" {
-		result, err = db.Query("select * from "+Database.database+".tags where groups = ?", group)
+		result, err = db.Query("select * from School.tags where groups = ?", group)
 	} else {
-		result, err = db.Query("select * from " + Database.database + ".tags")
+		result, err = db.Query("select * from School.tags")
 	}
 
 	if err != nil {
-		return err
+		log.Fatal(err.Error())
+		return
 	}
+
 	for result.Next() {
 		node := Tag{}
 		err = result.Scan(&node.id, &node.groups, &node.tag, &node.static)
 		if err != nil {
-			return err
+			log.Fatal(err.Error())
+			return
 		}
+
 		temp := make(map[string]string)
 		temp["tag"] = node.tag
 		temp["static"] = strconv.Itoa(node.static)
 		tag["tags"] = append(tag["tags"], temp)
 	}
+
 	print, _ := json.Marshal(tag)
-	fmt.Fprintf(Writer, string(print))
-	return nil
+	json.NewEncoder(w).Encode(string(print))
+
 }
-func getGroups(Writer http.ResponseWriter) error {
-	type Group struct {
-		id       int
-		name     string
-		operator string
-		curator  string
-	}
-	group := make(map[string][]map[string]string)
-	result, err := db.Query("select * from " + Database.database + ".groups")
+
+func getGroups(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var (
+		err    error
+		form   gGroup
+		token  string
+		group  = make(map[string][]map[string]string)
+		result *sql.Rows
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	token = form.Token
+
+	_, err = checkToken(token)
 	if err != nil {
-		return err
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	result, err = db.Query("select * from School.groups")
+	if err != nil {
+		log.Fatal(err.Error())
+		return
 	}
 
 	for result.Next() {
 		node := Group{}
 		err = result.Scan(&node.id, &node.name, &node.operator, &node.curator)
 		if err != nil {
-			return err
+			log.Fatal(err)
+			return
 		}
+
 		temp := make(map[string]string)
 		temp["group"] = node.name
 		temp["operator"] = node.operator
 		temp["curator"] = node.curator
 		group["groups"] = append(group["groups"], temp)
 	}
+
 	print, _ := json.Marshal(group)
-	fmt.Fprintf(Writer, string(print))
-	return nil
+	json.NewEncoder(w).Encode(string(print))
+
 }
-func getProfile(user User, Writer http.ResponseWriter) error {
-	_user := User{}
-	user_ := make(map[string]interface{})
-	err := db.QueryRow("select * from "+Database.database+".users where name = ?", user.name).Scan(&_user.id, &_user.pass, &_user.name, &_user.status, &_user.group, &_user.is_curator, &_user.profile, &_user.curatorTag)
+
+func getProfile(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var (
+		err      error
+		form     gProfile
+		user     userNode
+		token    string
+		userNode userNode
+		userObj  = make(map[string]interface{})
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	token = form.Token
+
+	user, err = checkToken(token)
 	if err != nil {
-		return err
+		json.NewEncoder(w).Encode(err.Error())
+		return
 	}
-	user_["name"] = _user.name
-	user_["status"] = _user.status
-	user_["group"] = _user.group
-	user_["profile"] = _user.profile
-	user_["is_curator"] = _user.is_curator
-	user_["curatorTag"] = _user.curatorTag
-	print, _ := json.Marshal(user_)
-	fmt.Fprintf(Writer, string(print))
-	return nil
+
+	err = db.QueryRow("select name, status, fgroup, profile, is_curator, curatorTag  from School.users where name = ?", user.name).Scan(&userNode.name, &userNode.status, &userNode.group, &userNode.profile, &userNode.isCurator, &userNode.curatorTag)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	userObj["name"] = userNode.name
+	userObj["status"] = userNode.status
+	userObj["group"] = userNode.group
+	userObj["profile"] = userNode.profile
+	userObj["is_curator"] = userNode.isCurator
+	userObj["curatorTag"] = userNode.curatorTag
+
+	print, _ := json.Marshal(userObj)
+	json.NewEncoder(w).Encode(string(print))
+
 }
-func getUsers(types string, group string, Writer http.ResponseWriter) error {
-	_user := make(map[string][]string)
-	_temp := []string{}
-	var result *sql.Rows
-	var err error
-	var groups string = ""
-	if group != "" {
-		groups = " fgroup = " + group + " and "
+
+func getUsers(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var (
+		err    error
+		form   gUsers
+		user   = make(map[string][]string)
+		temp   []string
+		types  string
+		group  string
+		groups string
+		result *sql.Rows
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	types = form.Types
+	group = form.Group
+
+	if group != "0" {
+		groups = " fgroup = \"" + group + "\" and "
 	}
 	if types == "s" {
-		result, err = db.Query("select * from " + Database.database + ".users where " + groups + " (status = \"student\" or status = \"updater\")")
+		result, err = db.Query("select name from School.users where " + groups + " (status = \"student\" or status = \"updater\")")
 	} else if types == "c" {
-		result, err = db.Query("select * from " + Database.database + ".users where status = \"curator\"")
+		result, err = db.Query("select name from School.users where status = \"curator\"")
 	} else if types == "a" {
-		result, err = db.Query("select * from " + Database.database + ".users where status = \"admin\"")
+		result, err = db.Query("select name from School.users where status = \"admin\"")
 	}
+
 	if err != nil {
-		return err
+		log.Fatal(err.Error())
+		return
 	}
+
 	for result.Next() {
-		node := User{}
-		err = result.Scan(&node.id, &node.pass, &node.name, &node.status, &node.group, &node.is_curator, &node.profile, &node.curatorTag)
+		node := userNode{}
+		err = result.Scan(&node.name)
 		if err != nil {
-			return err
+			log.Fatal(err.Error())
+			return
 		}
-		_temp = append(_temp, node.name)
+		temp = append(temp, node.name)
 	}
-	_user["users"] = _temp
-	print, _ := json.Marshal(_user)
-	fmt.Fprintf(Writer, string(print))
-	return nil
+
+	user["users"] = temp
+	print, _ := json.Marshal(user)
+	json.NewEncoder(w).Encode(string(print))
+
 }
-func getCurrentUser(currentUser string, user User, Writer http.ResponseWriter) error {
-	_user := User{}
-	user_ := make(map[string]string)
-	err := db.QueryRow("select * from "+Database.database+".users where name = ?", currentUser).Scan(&_user.id, &_user.pass, &_user.name, &_user.status, &_user.group, &_user.is_curator, &_user.profile, &_user.curatorTag)
+
+func getCurrentUser(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var (
+		err      error
+		form     gCurrentUser
+		cuser    string
+		token    string
+		userNode userNode
+		userObj  = make(map[string]string)
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	cuser = form.User
+	token = form.Token
+
+	_, err = checkToken(token)
 	if err != nil {
-		return err
+		json.NewEncoder(w).Encode(err.Error())
+		return
 	}
-	user_["username"] = _user.name
-	user_["profile"] = _user.profile
-	print, _ := json.Marshal(user_)
-	fmt.Fprintf(Writer, string(print))
-	return nil
+
+	err = db.QueryRow("select name, profile from School.users where name = ?", cuser).Scan(&userNode.name, &userNode.profile)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	userObj["username"] = userNode.name
+	userObj["profile"] = userNode.profile
+
+	print, _ := json.Marshal(userObj)
+	json.NewEncoder(w).Encode(string(print))
+
 }
-func getTasks(self string, user User, Writer http.ResponseWriter) error {
-	type Task struct {
-		id       int
-		group    string
-		tag      string
-		task     string
-		attached string
-		date_to  string
-		operator string
-		finished int
+
+func getTasks(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var (
+		err    error
+		self   string
+		form   gTasks
+		user   userNode
+		task   = make(map[string][]map[string]string)
+		token  string
+		result *sql.Rows
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	self = form.Self
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
 	}
-	task := make(map[string][]map[string]string)
-	var result *sql.Rows
-	var err error
+
 	if self != "0" {
-		result, err = db.Query("select * from "+Database.database+".Tasks where groups = ? and operator = ?", user.group, user.name)
+		result, err = db.Query("select * from School.Tasks where groups = ? and operator = ?", user.group, user.name)
 	} else {
-		result, err = db.Query("select * from "+Database.database+".Tasks where groups = ?", user.group)
+		result, err = db.Query("select * from School.Tasks where groups = ?", user.group)
 	}
 	if err != nil {
-		return err
+		log.Fatal(err.Error())
+		return
 	}
+
 	for result.Next() {
 		node := Task{}
-		err = result.Scan(&node.id, &node.group, &node.tag, &node.task, &node.attached, &node.date_to, &node.operator, &node.finished)
+		err = result.Scan(&node.id, &node.group, &node.tag, &node.task, &node.attached, &node.dateTo, &node.operator, &node.finished)
+
 		if err != nil {
-			return err
+			log.Fatal(err.Error())
+			return
 		}
+
 		temp := make(map[string]string)
 		temp["id"] = strconv.Itoa(node.id)
 		temp["group"] = node.group
 		temp["tag"] = node.tag
 		temp["task"] = node.task
 		temp["attached"] = node.attached
-		temp["date_to"] = node.date_to
+		temp["date_to"] = node.dateTo
 		temp["operator"] = node.operator
 		temp["finished"] = strconv.Itoa(node.finished)
 		task["tags"] = append(task["tags"], temp)
 	}
+
 	print, _ := json.Marshal(task)
-	fmt.Fprintf(Writer, string(print))
-	return nil
+	json.NewEncoder(w).Encode(string(print))
+
 }
+
+// Hey now 5:47... I'm finished this sh*t
 
 func itemExists(array []string, item string) bool {
 
@@ -478,160 +1337,50 @@ func itemExists(array []string, item string) bool {
 	return false
 }
 
-func HttpServer(Writer http.ResponseWriter, Request *http.Request) {
+func init() {
 
-	baseURL := Request.URL.Path[1:]
-	splited := strings.Split(baseURL, "/")
+	var err error
 
-	api := splited[0]
-	var allParams []string
-	var data = time.Now().Format(time.RFC1123)
-
-	dataSplited := strings.SplitAfter(data, " ")
-	data = dataSplited[0] + dataSplited[1] + dataSplited[2] + dataSplited[3]
-
-	params, err := getArgs(api)
-
+	createDirectory(localdir)
+	localimg, err = ioutil.ReadDir(localdir)
 	if err != nil {
-		fmt.Fprintf(Writer, err.Error())
+		log.Fatal(err.Error())
 		return
 	}
-
-	if len(splited) < len(params) {
-		fmt.Fprintf(Writer, "Вы должны указать все параметры")
-		return
-	}
-
-	if len(splited) > (len(params) + 2) {
-		fmt.Fprintf(Writer, "Слишком много параметров")
-		return
-	}
-
-	for i := 0; i < len(params); i++ {
-		allParams = append(allParams, splited[i+1])
-	}
-
-	db, err = sql.Open("mysql", Database.user+":"+Database.pass+"@tcp(localhost:3306)/"+Database.database)
+	db, err = sql.Open("mysql", database.user+":"+database.pass+"@tcp(localhost:3306)/"+database.database)
 	if err != nil {
-		fmt.Fprintf(Writer, err.Error())
 		fmt.Println(err.Error())
 		return
-	} else {
-		fmt.Println("Connect to database Succsess")
 	}
-
-	if itemExists(params, "token") {
-		prepare := allParams[len(allParams)-1]
-		decoded, _ := base64.URLEncoding.DecodeString(prepare)
-		splitDecoded := strings.Split(string(decoded), "|")
-		time := splitDecoded[0]
-		pass := splitDecoded[1]
-		name := splitDecoded[2]
-		if time != data {
-			fmt.Fprintf(Writer, "Токен устарел")
-			return
-		}
-		user := User{}
-		err := db.QueryRow("select * from "+Database.database+".users where `name` = ?", name).Scan(&user.id, &user.pass, &user.name, &user.status, &user.group, &user.is_curator, &user.profile, &user.curatorTag)
-		if err != nil {
-			fmt.Fprintf(Writer, err.Error())
-			return
-		}
-		if user.pass != pass {
-			fmt.Fprintf(Writer, "Токен не верен")
-			return
-		}
-
-		switch api {
-		case "add-group":
-			err = addGroup(allParams[0], allParams[1], user, Writer)
-			fmt.Println(err)
-		case "add-image":
-			err = addImage(allParams[0], allParams[1], []byte(allParams[2]), user, Writer)
-			fmt.Println(err)
-		case "add-message":
-			err = addMessage(allParams[0], allParams[1], allParams[2], user, Writer)
-			fmt.Println(err)
-		case "add-tag":
-			err = addTag(allParams[0], allParams[1], allParams[2], user, Writer)
-			fmt.Println(err)
-		case "apply-Task":
-			err = applyTask(allParams[0], user, Writer)
-			fmt.Println(err)
-		case "change-group":
-			err = changeGroup(allParams[0], allParams[1], user, Writer)
-			fmt.Println(err)
-		case "delete-group":
-			err = deleteGroup(allParams[0], user, Writer)
-			fmt.Println(err)
-		case "delete-image":
-			err = deleteImage(allParams[0], user, Writer)
-			fmt.Println(err)
-		case "delete-messages":
-			err = deleteMessage(allParams[0], allParams[1], allParams[2], user, Writer)
-			fmt.Println(err)
-		case "get-tags":
-			err = getTags(allParams[0], user, Writer)
-			fmt.Println(err)
-		case "get-profile":
-			err = getProfile(user, Writer)
-			fmt.Println(err)
-		case "get-currentUser":
-			err = getCurrentUser(allParams[0], user, Writer)
-			fmt.Println(err)
-		case "get-tasks":
-			err = getTasks(allParams[0], user, Writer)
-			fmt.Println(err)
-		case "get-messages":
-			err = getMessages(user, Writer)
-			fmt.Println(err)
-		case "get-images":
-			err = getImages(allParams[0], allParams[1], user, Writer)
-			fmt.Println(err)
-		}
-	} else {
-		switch api {
-		case "access":
-			getAccess(allParams[0], allParams[1], data, Writer)
-		case "get-groups":
-			getGroups(Writer)
-		case "get-users":
-			getUsers(allParams[0], allParams[1], Writer)
-		}
-	}
-	//
-
-	defer db.Close()
+	fmt.Println("Connect to database Succsess")
 }
 
 func main() {
 
-	methods["access"] = []string{"name", "pass"}
-	methods["add-group"] = []string{"name", "operator", "token"}
-	methods["add-image"] = []string{"tag", "path", "image", "token"}
-	methods["add-message"] = []string{"pick", "message", "date", "token"}
-	methods["add-tag"] = []string{"tag", "curator", "group", "token"}
-	methods["add-task"] = []string{"tag", "group", "task", "date_to", "token"}
-	methods["apply-Task"] = []string{"id", "token"}
-	methods["change-group"] = []string{"username", "group", "token"}
-	methods["delete-group"] = []string{"groupname", "token"}
-	methods["delete-image"] = []string{"path", "token"}
-	methods["delete-message"] = []string{"message", "pick", "date"}
-	methods["delete_tag"] = []string{"tag", "group", "token"}
-	methods["delete-task"] = []string{"id", "token"}
-	methods["delete-user"] = []string{"username", "token"}
-	methods["get-curatorTag"] = []string{"tag", "token"}
-	methods["get-images"] = []string{"tag", "date", "token"}
-	methods["get-messages"] = []string{"token"}
-	methods["get-tags"] = []string{"group", "token"}
-	methods["get-groups"] = []string{"some"}
-	methods["get-profile"] = []string{"token"}
-	methods["get-users"] = []string{"type", "group"}
-	methods["get-currentUser"] = []string{"currentUser", "token"}
-	methods["get-tasks"] = []string{"self", "token"}
-	methods["null"] = []string{""}
+	router := mux.NewRouter()
+	router.HandleFunc("/access", getAccess).Methods("POST")
+	router.HandleFunc("/add-group", addGroup).Methods("POST")
+	router.HandleFunc("/add-image", addImage).Methods("POST")
+	router.HandleFunc("/add-message", addMessage).Methods("POST")
+	router.HandleFunc("/add-tag", addTag).Methods("POST")
+	router.HandleFunc("/add-task", addTask).Methods("POST")
+	router.HandleFunc("/applyTask", applyTask).Methods("POST")
+	router.HandleFunc("/changeGroup", changeGroup).Methods("POST")
+	router.HandleFunc("/delete-group", deleteGroup).Methods("POST")
+	router.HandleFunc("/delete-image", deleteImage).Methods("POST")
+	router.HandleFunc("/delete-message", deleteMessage).Methods("POST")
+	router.HandleFunc("/delete-tag", deleteTag).Methods("POST")
+	router.HandleFunc("/delete-task", deleteTask).Methods("POST")
+	router.HandleFunc("/delete-user", deleteUser).Methods("POST")
+	router.HandleFunc("/get-curatorTag", getCuratorTag).Methods("POST")
+	router.HandleFunc("/get-images", getImages).Methods("POST")
+	router.HandleFunc("/get-messages", getMessages).Methods("POST")
+	router.HandleFunc("/get-tags", getTags).Methods("POST")
+	router.HandleFunc("/get-groups", getGroups).Methods("POST")
+	router.HandleFunc("/get-profile", getProfile).Methods("POST")
+	router.HandleFunc("/get-users", getUsers).Methods("POST")
+	router.HandleFunc("/get-currentUser", getCurrentUser).Methods("POST")
+	router.HandleFunc("/get-tasks", getTasks).Methods("POST")
 
-	http.HandleFunc("/", HttpServer)
-	http.ListenAndServe(":8080", nil)
-
+	log.Fatal(http.ListenAndServe(":8080", router))
 }

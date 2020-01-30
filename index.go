@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -21,196 +22,253 @@ import (
 )
 
 type dataBase struct {
-	user     string //`json:"user"`
-	pass     string //`json:"pass"`
-	database string //`json:"database"`
+	user     string // Database user
+	pass     string // Database password
+	database string // Database name
 }
 
+// Data database table `users`
 type userNode struct {
-	id         int    //`json:"id"`
-	pass       string //`json:"pass"`
-	name       string //`json:"name"`
-	status     string //`json:"status"`
-	group      string //`json:"group"`
-	isCurator  string //`json:"is_curator"`
-	profile    string //`json:"profile"`
-	curatorTag string //`json:"curatorTag"`
+	id   int    // user id in  (int(13))
+	pass string // user password (varchar)
+	name string // user name (varchar)
+	/*
+		Theare types of permissions for user
+		admin - can change `groups`, `user` tables
+		updater - can change `Images`, `messages`
+		curator - can change `Tasks`
+		student - can read some tables
+	*/
+	status     string // Status. Type of permission (varchar)
+	group      string // user group name (varchar)
+	isCurator  string // Variable for marking user as curator (int)
+	profile    string // Profile image path (text)
+	curatorTag string // Name of tag if user are curator
 }
 
+// some data from database `users`
 type accessForm struct {
-	Name string `json:"name"`
-	Pass string `json:"pass"`
+	Name string `json:"name"` // User name
+	Pass string `json:"pass"` // User password
 }
 
-type GroupForm struct {
-	Name     string `json:"name"`
-	Token    string `json:"token"`
-	Operator string `json:"operator"`
+type addUserForm struct {
+	Pass      string `json:"pass"`
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	Group     string `json:"group"`
+	IsCurator string `json:"is_curator"`
+	Token     string `json:"token"`
 }
 
-type ImageForm struct {
-	Tags  string `json:"tag"`
-	Path  string `json:"path"`
-	Token string `json:"token"`
+// some data from `groups`
+type groupForm struct {
+	Name     string `json:"name"`     // Group name (varchar)
+	Token    string `json:"token"`    // Token
+	Operator string `json:"operator"` // Group operator (varchar)
 }
 
-type MessageForm struct {
-	Pick    string `json:"pick"`
-	Token   string `json:"token"`
-	Message string `json:"message"`
+// some data from `Images`
+type imageForm struct {
+	Tags  string `json:"tag"`   // Image tag. For example: "Информатика" (varchar)
+	Path  string `json:"path"`  // Abstact image path
+	Token string `json:"token"` // Token
 }
 
-type TagForm struct {
-	Tags    string `json:"tag"`
-	Group   string `json:"group"`
-	Token   string `json:"token"`
-	Curator string `json:"curator"`
+// some data from `messages`
+type messageForm struct {
+	Pick    string `json:"pick"`    // pick - It's mark for special messages (int)
+	Token   string `json:"token"`   // Token
+	Message string `json:"message"` // Message text (text)
 }
 
-type TaskForm struct {
-	Tags   string `json:"tag"`
-	Task   string `json:"task"`
-	Group  string `json:"group"`
-	Token  string `json:"token"`
-	DateTo string `json:"date_to"`
+// some data from `tags`
+type tagForm struct {
+	Tags    string `json:"tag"`     // Mean one tag. It's name of school subject
+	Group   string `json:"group"`   // Name of group which contain this subject
+	Token   string `json:"token"`   // Token
+	Curator string `json:"curator"` // Curator of this subject
 }
 
+// some data from `Tasks`
+type taskForm struct {
+	Tags   string `json:"tag"`     // Subject which contain task
+	Task   string `json:"task"`    // Task
+	Group  string `json:"group"`   // group which contain subject which contain task
+	Token  string `json:"token"`   // Token
+	DateTo string `json:"date_to"` // Date when task will be diskard
+}
+
+// some data from `Task` for ApplyTask func
 type applyTaskForm struct {
-	ID    string `json:"id"`
-	Token string `json:"token"`
+	ID    string `json:"id"`    // ID of task
+	Token string `json:"token"` // Token
 }
 
+// some data from `groups` and `users`
 type changeGroupForm struct {
-	UserName string `json:"username"`
-	Group    string `json:"group"`
-	Token    string `json:"token"`
+	UserName string `json:"username"` // User, who will be moved
+	Group    string `json:"group"`    // Group name
+	Token    string `json:"token"`    // Token
 }
 
+// some data from `groups` for deleteGroup func
 type dGroupForm struct {
-	Group string `json:"groupname"`
-	Token string `json:"token"`
+	Group string `json:"groupname"` // Group name
+	Token string `json:"token"`     // Token
 }
 
+// some data from `Images` for deleteImage func
 type dImage struct {
-	Path  string `json:"path"`
-	Token string `json:"token"`
+	Path  string `json:"path"`  // Image path
+	Token string `json:"token"` // Token
 }
 
+// some data from `messages` for deleteMessage func
 type dMessage struct {
-	Message string `json:"message"`
-	Pick    string `json:"pick"`
-	Date    string `json:"date"`
-	Token   string `json:"token"`
+	Message string `json:"message"` // Message text
+	Pick    string `json:"pick"`    // Mark
+	Date    string `json:"date"`    // Upload date
+	Token   string `json:"token"`   // Token
 }
 
+//some data from `tags` for deleteTag func
 type dTag struct {
-	Tags  string `json:"tag"`
-	Group string `json:"group"`
-	Token string `json:"token"`
+	Tags  string `json:"tag"`   // Tag name. I mean one tag
+	Group string `json:"group"` // Name of group
+	Token string `json:"token"` // Token
 }
 
+//some data from `Tasks` for deleteTask func
 type dTask struct {
-	ID    string `json:"id"`
-	Token string `json:"token"`
+	ID    string `json:"id"`    // id of task
+	Token string `json:"token"` // Token
 }
 
+// some data from `users` for deeteUser func
 type dUser struct {
-	User  string `json:"username"`
-	Token string `json:"token"`
+	User  string `json:"username"` // User name
+	Token string `json:"token"`    // Token
 }
 
+// some data from `users` for getCuratorTag func
 type gCuratorTagForm struct {
-	Tags  string `json:"tag"`
-	Token string `json:"token"`
+	Tags  string `json:"tag"`   // Tag name. Mean one
+	Token string `json:"token"` // Token
 }
 
+// some data from `Images` for getImages func
 type gImages struct {
-	Tags  string `json:"tag"`
-	Date  string `json:"date"`
-	Token string `json:"token"`
+	Tags  string `json:"tag"`   // Tag name. Mean one
+	Date  string `json:"date"`  // Upload date
+	Token string `json:"token"` // Token
 }
 
+// some data from `Images` for getImages func
 type imageNode struct {
-	id    int
-	group string
-	tag   string
-	date  string
-	path  string
+	id    int    // Image id in database
+	group string // Group name
+	tag   string // Tag name
+	date  string // upload date name
+	path  string // Image path
 }
 
 type gMessages struct {
-	Token string `json:"token"`
+	Token string `json:"token"` // Token
 }
 
+// some data from `messages` for getMessages func
 type Message struct {
-	id       int
-	group    string
-	pick     int
-	message  string
-	operator string
-	date     string
+	id       int    // id of message in database
+	group    string // Name of group which contain message
+	pick     int    // Mark for set special messages
+	message  string // Message text
+	operator string // Name of user who posted message
+	date     string // Upload date
 }
 
+// some data from `tags` for getTags func
 type gTags struct {
-	Group string `json:"group"`
-	Token string `json:"token"`
+	Group string `json:"group"` // Name of group
+	All   string `json:"all"`
+	Token string `json:"token"` // Token
 }
 
-type Tag struct {
-	id     int
-	groups string
-	tag    string
-	static int
+// some data from `tags` for getTags func
+type tag struct {
+	id     int    // id of tag in database
+	groups string // Name of group
+	tag    string // Name of tag
+	static int    // Mark for permission to edit it
 }
 
-type gGroup struct {
-	Token string `json:"token"`
-}
-
+// some data from `groups` for getGroups
 type Group struct {
-	id       int
-	name     string
-	operator string
-	curator  string
+	id       int    // id in database
+	name     string // Name of group
+	operator string // Name of user who is updater of group
+	curator  string // Name of user who is curator of group
 }
 
 type gProfile struct {
-	Token string `json:"token"`
+	User  string `json:"username"` // User name
+	Token string `json:"token"`    // Token
 }
 
+// some data from `users` for getUser func
 type gUsers struct {
-	Types string `json:"type"`
-	Group string `json:"group"`
+	Types string `json:"type"`  // Additional variable
+	Group string `json:"group"` // Name of group
 }
 
+// some data from `users` for getCurrentUser func
 type gCurrentUser struct {
-	User  string `json:"currentUser"`
-	Token string `json:"token"`
+	User  string `json:"currentUser"` // User name
+	Token string `json:"token"`       // Token
 }
 
+// some data from `Tasks` for getTasks func
 type gTasks struct {
-	Self  string `json:"self"`
-	Token string `json:"token"`
+	Self  string `json:"self"`  // Additional variable
+	Token string `json:"token"` // Token
 }
 
+// some data from `Tasks` for getTask func
 type Task struct {
-	id       int
-	group    string
-	tag      string
-	task     string
-	attached string
-	dateTo   string
-	operator string
-	finished int
+	id       int    // id in database
+	group    string // Name of group
+	tag      string // Name of tag
+	task     string // Task text
+	attached string // attached (to user *false by defauld)
+	dateTo   string // Upload date
+	operator string // Name of user who upload it
+	finished int    // Mark for finished state
 }
 
-var db *sql.DB
-var localimg []os.FileInfo
-var localdir = "/var/www/html/school/img"
-var database = dataBase{"admin", "8895304025Dr", "School"}
-var methods = make(map[string][]string)
+var db *sql.DB                                             // Database interface
+var localimg []os.FileInfo                                 // var for list of files in local dir
+var localdir = "/var/www/html/school/img"                  // local dir for save images
+var database = dataBase{"admin", "8895304025Dr", "School"} // Structure for init database
+// letters for random
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 func fileExists(filename string) bool {
+
+	/*
+		get (filename) in dir
+		return bool
+		Example:
+		FileSystem:
+		-- .
+		-- ..
+		-- dir
+		-- abc.jpg
+		-- test.png
+		state := fileExists("test.png")
+		fmt.Println(state)
+		Output: true
+	*/
+
 	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
 		return false
@@ -219,6 +277,23 @@ func fileExists(filename string) bool {
 }
 
 func createDirectory(dirName string) bool {
+
+	/*
+		get ( dir name )
+		return bool
+		Example:
+		File System:
+		-- .
+		-- ..
+		state := createDirectory("newDir")
+		fmt.Println(state)
+		Output: true
+		FileSystem:
+		-- .
+		-- ..
+		-- newDir
+	*/
+
 	src, err := os.Stat(dirName)
 
 	if os.IsNotExist(err) {
@@ -235,6 +310,27 @@ func createDirectory(dirName string) bool {
 	}
 
 	return false
+}
+
+func getName(id int) (string, error) {
+
+	var name string
+
+	err := db.QueryRow("select name from School.users where id = ?", id).Scan(&name)
+	if err != nil {
+		return "", err
+	}
+
+	return name, nil
+
+}
+
+func getTag(id int) (string, error) {
+
+	var tag string
+
+	err := db.QueryRow("select ")
+
 }
 
 func checkToken(token string) (userNode, error) {
@@ -323,6 +419,115 @@ func getAccess(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(base)
 }
 
+func addUser(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err     error
+		name    string
+		pass    string
+		form    addUserForm
+		user    userNode
+		admin   bool
+		token   string
+		group   string
+		status  string
+		curator int
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	pass = form.Pass
+	if pass == "" {
+
+		for i := 0; i < 17; i++ {
+			x := rand.Intn(1)
+			if x == 0 {
+				pass = pass + string(letters[rand.Intn(len(letters))])
+			} else {
+				pass = pass + strconv.Itoa(rand.Intn(9))
+			}
+		}
+
+	}
+
+	group = form.Group
+	token = form.Token
+
+	if group == "" {
+		json.NewEncoder(w).Encode("Вы должны выбрать группу")
+		return
+	}
+
+	if form.Token != "" {
+
+		user, err = checkToken(token)
+		if err != nil {
+			json.NewEncoder(w).Encode(err.Error())
+			return
+		}
+
+		if user.status != "admin" {
+			json.NewEncoder(w).Encode("У вас нет разрешений для этого")
+			return
+		}
+
+		err = db.QueryRow("select name from School.users where name = ?", name).Scan(&user.name)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+		if user.name != "" {
+			json.NewEncoder(w).Encode("Пользователь с таким именем уже существует")
+			return
+		}
+
+		status = form.Status
+		if status == "" {
+			status = "student"
+		}
+
+		if form.IsCurator == "" {
+			curator = 0
+		} else {
+			curator, _ = strconv.Atoi(form.IsCurator)
+		}
+
+		_, err = db.Query("insert into School.users (`pass`,`name`,`status`,`fgroup`,`is_curator`,`profile`,`curatorTag`) values (?,?,?,?,?,?,\"\",\"\")", pass, name, status, curator)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+	} else {
+
+		err = db.QueryRow("select name from School.users where name = ?", name).Scan(&user.name)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+		if user.name != "" {
+			json.NewEncoder(w).Encode("Пользователь с таким именем уже существует")
+			return
+		}
+
+		_, err = db.Query("insert into School.users (`pass`,`name`,`status`,`fgroup`,`is_curator`,`profile`,`curatorTag`) values (?,?,\"student\",?,0,\"\",\"\")", pass, name, group)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+	}
+
+	if !admin {
+		json.NewEncoder(w).Encode("succsess")
+	} else {
+		json.NewEncoder(w).Encode(pass)
+	}
+
+}
+
 func addGroup(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/text")
@@ -331,7 +536,7 @@ func addGroup(w http.ResponseWriter, r *http.Request) {
 		err      error
 		token    string
 		group    string
-		form     GroupForm
+		form     groupForm
 		user     userNode
 		operator string // it's name of person
 	)
@@ -377,9 +582,9 @@ func addImage(w http.ResponseWriter, r *http.Request) {
 	var (
 		token   string
 		image   []byte
-		form    ImageForm
 		user    userNode
 		exist   = false
+		param   = mux.Vars(r)
 		err     error
 		date    string
 		utag    string // User tag. Example: "Информатика"
@@ -387,11 +592,12 @@ func addImage(w http.ResponseWriter, r *http.Request) {
 		splited []string
 	)
 
-	_ = json.NewDecoder(r.Body).Decode(&form)
+	utagEnc, _ := hex.DecodeString(param["tag"])
+	pathEnc, _ := hex.DecodeString(param["path"])
 
-	utag = form.Tags
-	path = form.Path
-	token = form.Token
+	utag = string(utagEnc)
+	path = string(pathEnc)
+	token = param["token"]
 
 	user, err = checkToken(token)
 	if err != nil {
@@ -416,6 +622,7 @@ func addImage(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(err.Error())
 		return
 	}
+	log.Println(utag)
 
 	hash := sha256.New()
 	hash.Write([]byte(image))
@@ -453,7 +660,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	var (
 		err     error
 		pick    string
-		form    MessageForm
+		form    messageForm
 		user    userNode
 		message string
 		token   string
@@ -491,7 +698,7 @@ func addTag(w http.ResponseWriter, r *http.Request) {
 	var (
 		err     error
 		tags    string // mean tag. Simple: "Информатика"
-		form    TagForm
+		form    tagForm
 		user    userNode
 		group   string
 		token   string
@@ -543,7 +750,7 @@ func addTask(w http.ResponseWriter, r *http.Request) {
 		err    error
 		tags   string // I mean one tag
 		task   string
-		form   TaskForm
+		form   taskForm
 		user   userNode
 		group  string
 		token  string
@@ -570,6 +777,44 @@ func addTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func selectTask(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		id    int
+		err   error
+		user  userNode
+		form  applyTaskForm
+		token string
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	id, _ = strconv.Atoi(form.ID)
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "student" && user.status != "updater" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("update School.Tasks set attached = \""+user.name+"|CURDATE()\" where id = ?", id)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+
+	}
 	json.NewEncoder(w).Encode("succsess")
 
 }
@@ -602,11 +847,12 @@ func applyTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db.Query("update School.Tasks set `finished` = 1 where `id` = ?", id)
+	_, err = db.Query("update School.Tasks set finished = 1 where id = ?", id)
 	if err != nil {
 		json.NewEncoder(w).Encode(err.Error())
 		return
 	}
+
 	json.NewEncoder(w).Encode("succsess")
 
 }
@@ -744,6 +990,7 @@ func deleteMessage(w http.ResponseWriter, r *http.Request) {
 	pick, _ = strconv.Atoi(form.Pick)
 	date = form.Date
 	token = form.Token
+	message = form.Message
 
 	user, err = checkToken(token)
 	if err != nil {
@@ -883,6 +1130,53 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 
 // I'm tired. Realy... Now 4:09 Thusday at night, and after few hours i should go to college... I'm fine )
 // I'm here. Now 4:00 but now wensday. I can't think normal.
+
+func getCurator(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err        error
+		form       gProfile
+		user       userNode
+		token      string
+		operatorID int
+		curatorID  int
+		operator   string
+		curator    string
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	err = db.QueryRow("select operatorID, curatorId from School.groups where name = ?", user.group).Scan(&operatorID, &curatorID)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	operator, err = getName(operatorID)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	curator, err = getName(curatorID)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("{\"operator\" : \"" + operator + "\", \"curator\" : \"" + curator + "\"}")
+
+}
 
 func getCuratorTag(w http.ResponseWriter, r *http.Request) {
 
@@ -1030,7 +1324,8 @@ func getTags(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		err    error
-		tag    = make(map[string][]map[string]string)
+		all    string
+		tags   = make(map[string][]map[string]string)
 		form   gTags
 		user   userNode
 		group  string
@@ -1040,6 +1335,7 @@ func getTags(w http.ResponseWriter, r *http.Request) {
 
 	json.NewDecoder(r.Body).Decode(&form)
 
+	all = form.All
 	group = form.Group
 	token = form.Token
 
@@ -1049,15 +1345,18 @@ func getTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.status != "admin" {
-		json.NewEncoder(w).Encode("У Вас нет разрешений для этих действий")
-		return
-	}
-
-	if group != "0" {
-		result, err = db.Query("select * from School.tags where groups = ?", group)
-	} else {
+	if all != "0" {
+		if user.status != "admin" {
+			json.NewEncoder(w).Encode("У Вас нет разрешений для этих действий")
+			return
+		}
 		result, err = db.Query("select * from School.tags")
+	} else {
+		if group != "0" {
+			result, err = db.Query("select * from School.tags where groups = ?", group)
+		} else {
+			result, err = db.Query("select * from School.tags")
+		}
 	}
 
 	if err != nil {
@@ -1066,7 +1365,7 @@ func getTags(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for result.Next() {
-		node := Tag{}
+		node := tag{}
 		err = result.Scan(&node.id, &node.groups, &node.tag, &node.static)
 		if err != nil {
 			log.Fatal(err.Error())
@@ -1076,10 +1375,10 @@ func getTags(w http.ResponseWriter, r *http.Request) {
 		temp := make(map[string]string)
 		temp["tag"] = node.tag
 		temp["static"] = strconv.Itoa(node.static)
-		tag["tags"] = append(tag["tags"], temp)
+		tags["tags"] = append(tags["tags"], temp)
 	}
 
-	print, _ := json.Marshal(tag)
+	print, _ := json.Marshal(tags)
 	json.NewEncoder(w).Encode(string(print))
 
 }
@@ -1090,21 +1389,9 @@ func getGroups(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		err    error
-		form   gGroup
-		token  string
 		group  = make(map[string][]map[string]string)
 		result *sql.Rows
 	)
-
-	json.NewDecoder(r.Body).Decode(&form)
-
-	token = form.Token
-
-	_, err = checkToken(token)
-	if err != nil {
-		json.NewEncoder(w).Encode(err.Error())
-		return
-	}
 
 	result, err = db.Query("select * from School.groups")
 	if err != nil {
@@ -1142,12 +1429,14 @@ func getProfile(w http.ResponseWriter, r *http.Request) {
 		user     userNode
 		token    string
 		userNode userNode
+		username string
 		userObj  = make(map[string]interface{})
 	)
 
 	json.NewDecoder(r.Body).Decode(&form)
 
 	token = form.Token
+	username = form.User
 
 	user, err = checkToken(token)
 	if err != nil {
@@ -1155,10 +1444,25 @@ func getProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.QueryRow("select name, status, fgroup, profile, is_curator, curatorTag  from School.users where name = ?", user.name).Scan(&userNode.name, &userNode.status, &userNode.group, &userNode.profile, &userNode.isCurator, &userNode.curatorTag)
-	if err != nil {
-		log.Fatal(err.Error())
-		return
+	if username != "0" {
+
+		if user.status != "admin" {
+			json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+			return
+		}
+
+		err = db.QueryRow("select name, status, fgroup, profile, is_curator, curatorTag  from School.users where name = ?", username).Scan(&userNode.name, &userNode.status, &userNode.group, &userNode.profile, &userNode.isCurator, &userNode.curatorTag)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+	} else {
+		err = db.QueryRow("select name, status, fgroup, profile, is_curator, curatorTag  from School.users where name = ?", user.name).Scan(&userNode.name, &userNode.status, &userNode.group, &userNode.profile, &userNode.isCurator, &userNode.curatorTag)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
 	}
 
 	userObj["name"] = userNode.name
@@ -1299,6 +1603,7 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for result.Next() {
+
 		node := Task{}
 		err = result.Scan(&node.id, &node.group, &node.tag, &node.task, &node.attached, &node.dateTo, &node.operator, &node.finished)
 
@@ -1340,18 +1645,19 @@ func itemExists(array []string, item string) bool {
 func init() {
 
 	var err error
-
 	createDirectory(localdir)
 	localimg, err = ioutil.ReadDir(localdir)
 	if err != nil {
 		log.Fatal(err.Error())
 		return
 	}
+
 	db, err = sql.Open("mysql", database.user+":"+database.pass+"@tcp(localhost:3306)/"+database.database)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
+
 	fmt.Println("Connect to database Succsess")
 }
 
@@ -1359,11 +1665,13 @@ func main() {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/access", getAccess).Methods("POST")
+	router.HandleFunc("/add-user", addUser).Methods("POST")
 	router.HandleFunc("/add-group", addGroup).Methods("POST")
-	router.HandleFunc("/add-image", addImage).Methods("POST")
+	router.HandleFunc("/add-image/{tag}/{path}/{token}", addImage).Methods("POST")
 	router.HandleFunc("/add-message", addMessage).Methods("POST")
 	router.HandleFunc("/add-tag", addTag).Methods("POST")
 	router.HandleFunc("/add-task", addTask).Methods("POST")
+	router.HandleFunc("/selectTask", selectTask).Methods("POST")
 	router.HandleFunc("/applyTask", applyTask).Methods("POST")
 	router.HandleFunc("/changeGroup", changeGroup).Methods("POST")
 	router.HandleFunc("/delete-group", deleteGroup).Methods("POST")
@@ -1372,6 +1680,7 @@ func main() {
 	router.HandleFunc("/delete-tag", deleteTag).Methods("POST")
 	router.HandleFunc("/delete-task", deleteTask).Methods("POST")
 	router.HandleFunc("/delete-user", deleteUser).Methods("POST")
+	router.HandleFunc("/get-curator", getCurator).Methods("POST")
 	router.HandleFunc("/get-curatorTag", getCuratorTag).Methods("POST")
 	router.HandleFunc("/get-images", getImages).Methods("POST")
 	router.HandleFunc("/get-messages", getMessages).Methods("POST")
@@ -1382,5 +1691,7 @@ func main() {
 	router.HandleFunc("/get-currentUser", getCurrentUser).Methods("POST")
 	router.HandleFunc("/get-tasks", getTasks).Methods("POST")
 
-	log.Fatal(http.ListenAndServe(":8080", router))
+	for {
+		log.Fatal(http.ListenAndServe(":8080", router))
+	}
 }

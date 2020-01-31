@@ -19,6 +19,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
+	"gopkg.in/h2non/bimg.v1"
 )
 
 type dataBase struct {
@@ -179,7 +180,7 @@ type gMessages struct {
 }
 
 // some data from `messages` for getMessages func
-type Message struct {
+type message struct {
 	id         int    // id of message in database
 	groupID    int    // Name of group which contain message
 	pick       int    // Mark for set special messages
@@ -204,7 +205,7 @@ type tag struct {
 }
 
 // some data from `groups` for getGroups
-type Group struct {
+type group struct {
 	id         int    // id in database
 	name       string // Name of group
 	operatorID int    // Name of user who is updater of group
@@ -235,15 +236,70 @@ type gTasks struct {
 }
 
 // some data from `Tasks` for getTask func
-type Task struct {
+type task struct {
 	id         int    // id in database
 	groupID    int    // Name of group
 	tagID      int    // Name of tag
 	task       string // Task text
-	attached   string // attached (to user *false by defauld)
 	dateTo     string // Upload date
+	attached   string // who keep it
 	operatorID int    // Name of user who upload it
 	finished   int    // Mark for finished state
+}
+
+type gHomeTask struct {
+	ID    string `json:"id"`    // userID
+	All   string `json:"all"`   // additional
+	Token string `json:"token"` // token
+}
+
+type applyHomeTask struct {
+	ID    string `json:"id"`    // taskID
+	User  string `json:"user"`  // user
+	Token string `json:"token"` // token
+}
+
+type addHomeTask struct {
+	Tag    string `json:"tag"`     // tag link
+	Docs   string `json:"docs"`    // docs list
+	Task   string `json:"task"`    // home task
+	Group  string `json:"group"`   // group link
+	Token  string `json:"token"`   // token
+	DateTo string `json:"date_to"` // finish date
+}
+
+type homeTask struct {
+	id         int    // Task id
+	groupID    int    // group id
+	tagID      int    // tag id
+	task       string // home task
+	dateTo     string // finish date
+	operatorID int    // user who create it
+	files      string // attached files
+}
+
+type homeData struct {
+	id       int // task id in database
+	taskID   int // link id to task
+	userID   int // user id who attached to it
+	finished int // mark.
+}
+
+type tests struct {
+	id         int    // id in database
+	groupID    int    // link to group
+	tagID      int    // link to tag
+	test       string // Task text
+	dateTo     string // finish task date
+	operatorID int    // who create it
+	docs       string // docs list
+}
+
+type testsData struct {
+	/* WATNING
+	It's simple with home Data
+	*/
+	// Please use homeData
 }
 
 var db *sql.DB                                             // Database interface
@@ -274,6 +330,7 @@ func fileExists(filename string) bool {
 	if os.IsNotExist(err) {
 		return false
 	}
+
 	return !info.IsDir()
 }
 
@@ -298,10 +355,12 @@ func createDirectory(dirName string) bool {
 	src, err := os.Stat(dirName)
 
 	if os.IsNotExist(err) {
+
 		errDir := os.MkdirAll(dirName, 0755)
 		if errDir != nil {
 			panic(err)
 		}
+
 		return true
 	}
 
@@ -314,6 +373,14 @@ func createDirectory(dirName string) bool {
 }
 
 func getName(id int) (string, error) {
+
+	/*
+		Function get user name from database using user id
+		Return string with user name and error
+		Example:
+		user, err := getName(10)
+		log.Println(user)
+	*/
 
 	var name string
 
@@ -328,6 +395,14 @@ func getName(id int) (string, error) {
 
 func getNameID(name string) (int, error) {
 
+	/*
+		Function get user id from database using user name
+		Return int with id and error
+		Example:
+		id, err := getNameID("Some name")
+		log.Println(id)
+	*/
+
 	var id int
 
 	err := db.QueryRow("select id from School.users where name = ?", name).Scan(&id)
@@ -340,6 +415,14 @@ func getNameID(name string) (int, error) {
 }
 
 func getTag(id int) (string, error) {
+
+	/*
+		Function get name of subject from database using subject id
+		Return string with user name and error
+		Example:
+		tag, err := getTag(10)
+		log.Println(tag)
+	*/
 
 	var tag string
 
@@ -354,6 +437,14 @@ func getTag(id int) (string, error) {
 
 func getTagID(tag string) (int, error) {
 
+	/*
+		Function get subject id from database using subject id
+		Return int with id and error
+		Example:
+		tag, err := getTagID("Алгебра")
+		log.Println(tag)
+	*/
+
 	var id int
 
 	err := db.QueryRow("select id from School.tags where tag = ?", tag).Scan(&id)
@@ -366,6 +457,14 @@ func getTagID(tag string) (int, error) {
 }
 
 func getGroup(id int) (string, error) {
+
+	/*
+		Function get group name from database using group id
+		Return string with user name and error
+		Example:
+		group, err := getGroup(10)
+		log.Println(group)
+	*/
 
 	var group string
 
@@ -380,6 +479,14 @@ func getGroup(id int) (string, error) {
 
 func getGroupID(name string) (int, error) {
 
+	/*
+		Function get group id from database using group name
+		Return int with id and error
+		Example:
+		group, err := getGroupID("214-f")
+		log.Println(group)
+	*/
+
 	var id int
 
 	err := db.QueryRow("select id from School.groups where name = ?", name).Scan(&id)
@@ -391,7 +498,109 @@ func getGroupID(name string) (int, error) {
 
 }
 
+func getHomeTask(id int) (string, error) {
+
+	/*
+		Function get home task from database using task id
+		Return string with task and error
+		Example:
+		task, err := getHomeTask(10)
+		log.Println(task)
+	*/
+
+	var task string
+
+	err := db.QueryRow("select task from School.HomeTasks where id = ?", id).Scan(&task)
+	if err != nil {
+		return "", err
+	}
+
+	return task, nil
+
+}
+
+func getHomeTaskID(task string) (int, error) {
+
+	/*
+		Function get home task id from database using task name
+		Return int with id and error
+		Example:
+		task, err := getHomeTaskID("Теория информации практика 22")
+		log.Println(task)
+	*/
+
+	var id int
+
+	err := db.QueryRow("select id from School.HomeTasks where task = ?", task).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+
+}
+
+func getTest(id int) (string, error) {
+
+	/*
+		Function get tests task from database using task id
+		Return string with task and error
+		Example:
+		task, err := getTest(10)
+		log.Println(task)
+	*/
+
+	var task string
+
+	err := db.QueryRow("select task from School.Tests where id = ?", id).Scan(&task)
+	if err != nil {
+		return "", err
+	}
+
+	return task, nil
+
+}
+
+func getTestID(task string) (int, error) {
+
+	/*
+		Function get tests task id from database using task name
+		Return int with id and error
+		Example:
+		task, err := getTestID("Теория информации контрольная 22")
+		log.Println(task)
+	*/
+
+	var id int
+
+	err := db.QueryRow("select id from School.Tests where test = ?", task).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+
+}
+
+/*
+	**********IMPORTANT*********
+	Tokens structure and more info
+
+	All passwords which contains in database are hashed with sha256
+	Token contain date, user password and user name
+	After unification token hashed by base64 (URL)
+*/
+
 func checkToken(token string) (userNode, error) {
+
+	/*
+		Function validate token and return userNode struct
+		In this function token will be decrypted.
+		I compare password from database and from token for validate token
+		And database response I write to userNode strunc and return back
+		Example:
+		user, err := checkToken("KWQkQDpRQTeEMTQsn3DJdfBEQO==")
+	*/
 
 	var (
 		name string
@@ -406,21 +615,31 @@ func checkToken(token string) (userNode, error) {
 
 	user := userNode{}
 	date = time.Now().Format(time.RFC1123)
-
+	// Split date for get just date, with out time and etc.
 	splited = strings.SplitAfter(date, " ")
 	date = splited[0] + splited[1] + splited[2] + splited[3]
-
+	// Decode Token
 	decoded, err = base64.URLEncoding.DecodeString(token)
 	if err != nil {
 		return user, errors.New("Can't decode token")
 	}
-
+	// make date unification
 	splited = strings.Split(string(decoded), "|")
+	if len(splited) == 1 {
+		decoded, err = base64.URLEncoding.DecodeString(string(decoded))
+		if err != nil {
+			return user, errors.New("Can't decode token")
+		}
+		splited = strings.Split(string(decoded), "|")
+	}
+	if len(splited) == 1 {
+		return user, errors.New("Can't decode token")
+	}
 	getTime = splited[0]
 
 	pass = splited[1]
 	name = splited[2]
-
+	// Get info from database
 	err = db.QueryRow("select `id`, `pass`, `name`, `status`, `fgroup`, `is_curator`, `profile`, `curatorTag` from School.users where name = ?", name).Scan(&user.id, &user.pass, &user.name, &user.status, &user.group, &user.isCurator, &user.profile, &user.curatorTag)
 	if err != nil {
 		return user, err
@@ -438,7 +657,15 @@ func checkToken(token string) (userNode, error) {
 
 func getAccess(w http.ResponseWriter, r *http.Request) {
 
-	w.Header().Set("Content-Type", "application/json")
+	/*
+		This function generate Token and display it to http response
+		Also this function get information from database and compare
+		with input data.
+		WARNING.
+		This function is a part of api and served by mux api
+	*/
+
+	w.Header().Set("Content-Type", "application/text")
 
 	var (
 		name string
@@ -455,26 +682,27 @@ func getAccess(w http.ResponseWriter, r *http.Request) {
 
 	name = form.Name
 	pass = form.Pass
-
+	// Create date unification
 	date = time.Now().Format(time.RFC1123)
 	splited := strings.SplitAfter(date, " ")
 	date = splited[0] + splited[1] + splited[2] + splited[3]
 	hash.Write([]byte(pass))
 	summ = hex.EncodeToString(hash.Sum(nil))
-
+	// Get database info
 	result, _ := db.Query("select `id`, `pass`, `name`, `status`, `fgroup`, `is_curator`, `profile`, `curatorTag` from School.users where name = ?", name)
 	defer result.Close()
 	result.Next()
 	_ = result.Scan(&user.id, &user.pass, &user.name, &user.status, &user.group, &user.isCurator, &user.profile, &user.curatorTag)
-
+	// Comparing
 	if summ != user.pass {
 		fmt.Println(user.pass, "|", summ, "|", name)
 		fmt.Fprintf(w, "Логин или пароль введен неверно")
 		return
 	}
-
+	// Return token
 	base = base64.URLEncoding.EncodeToString([]byte(date + "|" + summ + "|" + name))
-	json.NewEncoder(w).Encode(base)
+	json.NewEncoder(w).Encode([]byte(base))
+
 }
 
 func addUser(w http.ResponseWriter, r *http.Request) {
@@ -620,7 +848,7 @@ func addGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	operatorID, err = getNameID(user.name)
+	operatorID, err = getNameID(operator)
 	if err != nil {
 		log.Fatal(err.Error())
 		return
@@ -630,7 +858,7 @@ func addGroup(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err.Error())
 		return
 	}
-	_, err = db.Query("insert into School.groups (`name`,`operator`,`curator`) values (?,?,?)", group, curatorID, operator)
+	_, err = db.Query("insert into School.groups (`name`,`operator`,`curator`) values (?,?,?)", group, curatorID, operatorID)
 	if err != nil {
 		json.NewEncoder(w).Encode(err.Error())
 		return
@@ -659,10 +887,8 @@ func addImage(w http.ResponseWriter, r *http.Request) {
 	)
 
 	utagEnc, _ := hex.DecodeString(param["tag"])
-	pathEnc, _ := hex.DecodeString(param["path"])
 
 	utag = string(utagEnc)
-	path = string(pathEnc)
 	token = param["token"]
 
 	user, err = checkToken(token)
@@ -688,7 +914,6 @@ func addImage(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(err.Error())
 		return
 	}
-	log.Println(utag)
 
 	hash := sha256.New()
 	hash.Write([]byte(image))
@@ -1351,8 +1576,10 @@ func getImages(w http.ResponseWriter, r *http.Request) {
 		result   *sql.Rows
 		imageObj = make(map[string][]map[string]string)
 		// special
-		group string
-		tag   string
+		tag     string
+		tagID   int
+		group   string
+		groupID int
 	)
 
 	json.NewDecoder(r.Body).Decode(&form)
@@ -1367,10 +1594,18 @@ func getImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tagID, err = getTagID(tags)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	groupID, err = getGroupID(user.group)
+
 	if tags == "0" {
-		result, err = db.Query("select * from School.Images where groups = ? and date = ?", user.group, date)
+		result, err = db.Query("select * from School.Images where groupID = ? and date = ?", groupID, date)
 	} else {
-		result, err = db.Query("select * from School.Images where groups = ? and tag = ?", user.group, tags)
+		result, err = db.Query("select * from School.Images where groupID = ? and tagID = ?", groupID, tagID)
 	}
 
 	if err != nil {
@@ -1405,8 +1640,8 @@ func getImages(w http.ResponseWriter, r *http.Request) {
 		temp["image"] = node.path
 		imageObj["images"] = append(imageObj["images"], temp)
 	}
-	print, _ := json.Marshal(imageObj)
-	json.NewEncoder(w).Encode(string(print))
+
+	json.NewEncoder(w).Encode(imageObj)
 
 }
 
@@ -1415,14 +1650,15 @@ func getMessages(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var (
-		err     error
-		form    gMessages
-		user    userNode
-		token   string
-		result  *sql.Rows
-		message = make(map[string][]map[string]string)
+		err        error
+		form       gMessages
+		user       userNode
+		token      string
+		result     *sql.Rows
+		messageObj = make(map[string][]map[string]interface{})
 		// special
 		group    string
+		groupID  int
 		operator string
 	)
 
@@ -1436,13 +1672,19 @@ func getMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err = db.Query("select * from School.messages where groups = ?", user.group)
+	groupID, err = getGroupID(user.group)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	result, err = db.Query("select * from School.messages where groupID = ?", groupID)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 
 	for result.Next() {
-		node := Message{}
+		node := message{}
 		err = result.Scan(&node.id, &node.groupID, &node.pick, &node.message, &node.operatorID, &node.date)
 		if err != nil {
 			log.Fatal(err.Error())
@@ -1461,18 +1703,17 @@ func getMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		temp := make(map[string]string)
-		temp["id"] = strconv.Itoa(node.id)
+		temp := make(map[string]interface{})
+		temp["id"] = node.id
 		temp["group"] = group
-		temp["pick"] = strconv.Itoa(node.pick)
+		temp["pick"] = node.pick
 		temp["message"] = node.message
 		temp["operator"] = operator
 		temp["date"] = node.date
-		message["messages"] = append(message["messages"], temp)
+		messageObj["messages"] = append(messageObj["messages"], temp)
 	}
 
-	print, _ := json.Marshal(message)
-	json.NewEncoder(w).Encode(string(print))
+	json.NewEncoder(w).Encode(messageObj)
 
 }
 
@@ -1483,12 +1724,14 @@ func getTags(w http.ResponseWriter, r *http.Request) {
 	var (
 		err    error
 		all    string
-		tags   = make(map[string][]map[string]string)
+		tags   = make(map[string][]map[string]interface{})
 		form   gTags
 		user   userNode
 		group  string
 		token  string
 		result *sql.Rows
+		// special
+		groupID int
 	)
 
 	json.NewDecoder(r.Body).Decode(&form)
@@ -1511,7 +1754,12 @@ func getTags(w http.ResponseWriter, r *http.Request) {
 		result, err = db.Query("select * from School.tags")
 	} else {
 		if group != "0" {
-			result, err = db.Query("select * from School.tags where groups = ?", group)
+			groupID, err = getGroupID(group)
+			if err != nil {
+				log.Fatal(err.Error())
+				return
+			}
+			result, err = db.Query("select * from School.tags where groupID = ?", groupID)
 		} else {
 			result, err = db.Query("select * from School.tags")
 		}
@@ -1530,14 +1778,13 @@ func getTags(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		temp := make(map[string]string)
+		temp := make(map[string]interface{})
 		temp["tag"] = node.tag
-		temp["static"] = strconv.Itoa(node.static)
+		temp["static"] = node.static
 		tags["tags"] = append(tags["tags"], temp)
 	}
 
-	print, _ := json.Marshal(tags)
-	json.NewEncoder(w).Encode(string(print))
+	json.NewEncoder(w).Encode(tags)
 
 }
 
@@ -1546,9 +1793,9 @@ func getGroups(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var (
-		err    error
-		group  = make(map[string][]map[string]string)
-		result *sql.Rows
+		err      error
+		groupObj = make(map[string][]map[string]string)
+		result   *sql.Rows
 		// special
 		curator  string
 		operator string
@@ -1561,7 +1808,7 @@ func getGroups(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for result.Next() {
-		node := Group{}
+		node := group{}
 		err = result.Scan(&node.id, &node.name, &node.operatorID, &node.curatorID)
 		if err != nil {
 			log.Fatal(err)
@@ -1584,11 +1831,10 @@ func getGroups(w http.ResponseWriter, r *http.Request) {
 		temp["group"] = node.name
 		temp["operator"] = operator
 		temp["curator"] = curator
-		group["groups"] = append(group["groups"], temp)
+		groupObj["groups"] = append(groupObj["groups"], temp)
 	}
 
-	print, _ := json.Marshal(group)
-	json.NewEncoder(w).Encode(string(print))
+	json.NewEncoder(w).Encode(groupObj)
 
 }
 
@@ -1603,7 +1849,7 @@ func getProfile(w http.ResponseWriter, r *http.Request) {
 		token    string
 		userNode userNode
 		username string
-		userObj  = make(map[string]interface{})
+		userObj  = make(map[string]string)
 	)
 
 	json.NewDecoder(r.Body).Decode(&form)
@@ -1645,8 +1891,7 @@ func getProfile(w http.ResponseWriter, r *http.Request) {
 	userObj["is_curator"] = userNode.isCurator
 	userObj["curatorTag"] = userNode.curatorTag
 
-	print, _ := json.Marshal(userObj)
-	json.NewEncoder(w).Encode(string(print))
+	json.NewEncoder(w).Encode(userObj)
 
 }
 
@@ -1697,8 +1942,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user["users"] = temp
-	print, _ := json.Marshal(user)
-	json.NewEncoder(w).Encode(string(print))
+	json.NewEncoder(w).Encode(user)
 
 }
 
@@ -1735,8 +1979,7 @@ func getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	userObj["username"] = userNode.name
 	userObj["profile"] = userNode.profile
 
-	print, _ := json.Marshal(userObj)
-	json.NewEncoder(w).Encode(string(print))
+	json.NewEncoder(w).Encode(userObj)
 
 }
 
@@ -1745,13 +1988,13 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var (
-		err    error
-		self   string
-		form   gTasks
-		user   userNode
-		task   = make(map[string][]map[string]string)
-		token  string
-		result *sql.Rows
+		err     error
+		self    string
+		form    gTasks
+		user    userNode
+		taskObj = make(map[string][]map[string]interface{})
+		token   string
+		result  *sql.Rows
 		// special
 		tag      string
 		group    string
@@ -1788,7 +2031,7 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 
 	for result.Next() {
 
-		node := Task{}
+		node := task{}
 		err = result.Scan(&node.id, &node.groupID, &node.tagID, &node.task, &node.attached, &node.dateTo, &node.operatorID, &node.finished)
 
 		if err != nil {
@@ -1814,20 +2057,651 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		temp := make(map[string]string)
-		temp["id"] = strconv.Itoa(node.id)
+		temp := make(map[string]interface{})
+		temp["id"] = node.id
 		temp["group"] = group
 		temp["tag"] = tag
 		temp["task"] = node.task
 		temp["attached"] = node.attached
 		temp["date_to"] = node.dateTo
 		temp["operator"] = operator
-		temp["finished"] = strconv.Itoa(node.finished)
-		task["tags"] = append(task["tags"], temp)
+		temp["finished"] = node.finished
+		taskObj["tasks"] = append(taskObj["tasks"], temp)
 	}
 
-	print, _ := json.Marshal(task)
-	json.NewEncoder(w).Encode(string(print))
+	json.NewEncoder(w).Encode(taskObj)
+
+}
+
+func uploadIco(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		token string
+		image []byte
+		user  userNode
+		param = mux.Vars(r)
+		err   error
+	)
+
+	token = param["token"]
+
+	user, err = checkToken(token)
+	if err != nil {
+		fmt.Fprintf(w, err.Error())
+		return
+	}
+
+	image, err = ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	image, err = bimg.NewImage(image).Resize(128, 128)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	hash := sha256.New()
+	hash.Write([]byte(image))
+
+	if user.profile != "" {
+		err = os.Remove(localdir + "/" + user.name)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+	}
+
+	ioutil.WriteFile(localdir+"/"+user.name, image, 0777)
+
+	_, err = db.Query("update School.users set profile = ?", "http://95.142.40.58//school/img/"+user.name)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func getHomeTasks(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var (
+		err     error
+		self    string
+		form    gTasks
+		user    userNode
+		taskObj = make(map[string][]map[string]interface{})
+		token   string
+		result  *sql.Rows
+		// special
+		tag      string
+		group    string
+		groupID  int
+		operator string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	self = form.Self
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	groupID, err = getGroupID(user.group)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	if self != "0" {
+		result, err = db.Query("select * from School.HomeTasks where groupID = ? and operatorID = ?", groupID, user.id)
+	} else {
+		result, err = db.Query("select * from School.Hometasks where groupID = ?", groupID)
+	}
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	for result.Next() {
+
+		node := homeTask{}
+		err = result.Scan(&node.id, &node.groupID, &node.tagID, &node.task, &node.dateTo, &node.operatorID, &node.files)
+
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		group, err = getGroup(node.groupID)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		tag, err = getTag(node.tagID)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		operator, err = getName(node.operatorID)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		temp := make(map[string]interface{})
+		temp["id"] = node.id
+		temp["group"] = group
+		temp["tag"] = tag
+		temp["task"] = node.task
+		temp["date_to"] = node.dateTo
+		temp["operator"] = operator
+		temp["Docs"] = node.files
+		taskObj["tasks"] = append(taskObj["tasks"], temp)
+	}
+
+	json.NewEncoder(w).Encode(taskObj)
+
+}
+
+func deleteHomeTask(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		id    int
+		err   error
+		form  dTask
+		user  userNode
+		token string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	id, _ = strconv.Atoi(form.ID)
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "curator" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("delete from School.HomeTasks where id = ?", id)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func getHomeData(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		id      int
+		err     error
+		all     string
+		form    gHomeTask
+		user    userNode
+		taskObj = make(map[string][]map[string]interface{})
+		token   string
+		result  *sql.Rows
+		// special
+		tasks string
+		guser string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	id, _ = strconv.Atoi(form.ID)
+	all = form.All
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if all != "0" {
+		if user.status != "curator" {
+			json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+			return
+		}
+		result, err = db.Query("select * from School.HomeData where taskID = ? and userID = ?", id, user.id)
+	} else {
+		result, err = db.Query("select * from School.HomeData where taskID = ?", id)
+	}
+
+	for result.Next() {
+
+		node := homeData{}
+		err = result.Scan(&node.id, &node.taskID, &node.userID, &node.finished)
+
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		tasks, err = getHomeTask(node.taskID)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		guser, err = getName(node.userID)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		temp := make(map[string]interface{})
+		temp["id"] = node.id
+		temp["task"] = tasks
+		temp["user"] = guser
+		temp["finished"] = node.finished
+		taskObj["tasks"] = append(taskObj["tasks"], temp)
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func applyHomeTasks(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		id    int
+		err   error
+		user  userNode
+		form  applyHomeTask
+		suser string
+		token string
+		// special
+		userID int
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	id, _ = strconv.Atoi(form.ID)
+	suser = form.User
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "curator" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	userID, err = getNameID(suser)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	_, err = db.Query("insert ignore into School.HomeData (`taskID`,`userID`,`finished`) values (?,?,1)", id, userID)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func addHomeTasks(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err        error
+		tags       string // I mean one tag
+		task       string
+		docs       string
+		form       addHomeTask
+		user       userNode
+		tagID      int
+		group      string
+		token      string
+		dateTo     string
+		groupID    int
+		operatorID int
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	tags = form.Tag
+	task = form.Task
+	docs = form.Docs
+	group = form.Group
+	token = form.Token
+	dateTo = form.DateTo
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	groupID, err = getGroupID(group)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	tagID, err = getTagID(tags)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	operatorID, err = getNameID(user.name)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	_, err = db.Query("insert into School.HomeTasks (`groupID`,`tagID`,`task`,`date_to`,`operatorID`, `files`) values (?,?,?,?,?,?)", groupID, tagID, task, dateTo, operatorID, docs)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func getTests(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var (
+		err     error
+		self    string
+		form    gTasks
+		user    userNode
+		taskObj = make(map[string][]map[string]interface{})
+		token   string
+		result  *sql.Rows
+		// special
+		tag      string
+		group    string
+		groupID  int
+		operator string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	self = form.Self
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	groupID, err = getGroupID(user.group)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	if self != "0" {
+		if user.status != "curator" {
+			json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+			return
+		}
+		result, err = db.Query("select * from School.Tests where groupID = ? and operatorID = ?", groupID, user.id)
+	} else {
+		result, err = db.Query("select * from School.Tests where groupID = ?", groupID)
+	}
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	for result.Next() {
+
+		node := tests{}
+		err = result.Scan(&node.id, &node.groupID, &node.tagID, &node.test, &node.dateTo, &node.operatorID, &node.docs)
+
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		group, err = getGroup(node.groupID)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		tag, err = getTag(node.tagID)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		operator, err = getName(node.operatorID)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		temp := make(map[string]interface{})
+		temp["id"] = node.id
+		temp["group"] = group
+		temp["tag"] = tag
+		temp["test"] = node.test
+		temp["date_to"] = node.dateTo
+		temp["operator"] = operator
+		temp["Docs"] = node.docs
+		taskObj["tasks"] = append(taskObj["tasks"], temp)
+	}
+
+	json.NewEncoder(w).Encode(taskObj)
+
+}
+
+func getTestsData(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		id      int
+		err     error
+		all     string
+		form    gHomeTask
+		user    userNode
+		taskObj = make(map[string][]map[string]interface{})
+		token   string
+		result  *sql.Rows
+		// special
+		tasks string
+		guser string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	id, _ = strconv.Atoi(form.ID)
+	all = form.All
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if all != "0" {
+		if user.status != "curator" {
+			json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+			return
+		}
+		result, err = db.Query("select * from School.TestsData where taskID = ? and userID = ?", id, user.id)
+	} else {
+		result, err = db.Query("select * from School.TestsData where taskID = ?", id)
+	}
+
+	for result.Next() {
+
+		node := homeData{}
+		err = result.Scan(&node.id, &node.taskID, &node.userID, &node.finished)
+
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		tasks, err = getHomeTask(node.taskID)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		guser, err = getName(node.userID)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+
+		temp := make(map[string]interface{})
+		temp["id"] = node.id
+		temp["test"] = tasks
+		temp["user"] = guser
+		temp["finished"] = node.finished
+		taskObj["tasks"] = append(taskObj["tasks"], temp)
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func addTests(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		err        error
+		tags       string // I mean one tag
+		task       string
+		docs       string
+		form       addHomeTask
+		user       userNode
+		tagID      int
+		group      string
+		token      string
+		dateTo     string
+		groupID    int
+		operatorID int
+	)
+
+	_ = json.NewDecoder(r.Body).Decode(&form)
+
+	tags = form.Tag
+	task = form.Task
+	docs = form.Docs
+	group = form.Group
+	token = form.Token
+	dateTo = form.DateTo
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	groupID, err = getGroupID(group)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	tagID, err = getTagID(tags)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	operatorID, err = getNameID(user.name)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	_, err = db.Query("insert into School.HomeTasks (`groupID`,`tagID`,`test`,`date_to`,`operatorID`, `files`) values (?,?,?,?,?,?)", groupID, tagID, task, dateTo, operatorID, docs)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func deleteTests(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		id    int
+		err   error
+		form  dTask
+		user  userNode
+		token string
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	id, _ = strconv.Atoi(form.ID)
+	token = form.Token
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "curator" {
+		json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+		return
+	}
+
+	_, err = db.Query("delete from School.Tasks where id = ?", id)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
 
 }
 
@@ -1869,7 +2743,7 @@ func main() {
 	router.HandleFunc("/access", getAccess).Methods("POST")
 	router.HandleFunc("/add-user", addUser).Methods("POST")
 	router.HandleFunc("/add-group", addGroup).Methods("POST")
-	router.HandleFunc("/add-image/{tag}/{path}/{token}", addImage).Methods("POST")
+	router.HandleFunc("/add-image/{tag}/{token}", addImage).Methods("POST")
 	router.HandleFunc("/add-message", addMessage).Methods("POST")
 	router.HandleFunc("/add-tag", addTag).Methods("POST")
 	router.HandleFunc("/add-task", addTask).Methods("POST")
@@ -1892,6 +2766,18 @@ func main() {
 	router.HandleFunc("/get-users", getUsers).Methods("POST")
 	router.HandleFunc("/get-currentUser", getCurrentUser).Methods("POST")
 	router.HandleFunc("/get-tasks", getTasks).Methods("POST")
+	router.HandleFunc("/upload-ico/{token}", uploadIco).Methods("POST")
+	router.HandleFunc("/get-homeTask", getHomeTasks).Methods("POST")
+	router.HandleFunc("/get-homeData", getHomeData).Methods("POST")
+	router.HandleFunc("/add-homeTask", addHomeTasks).Methods("POST")
+	router.HandleFunc("/delete-homeTask", deleteHomeTask).Methods("POST")
+	router.HandleFunc("/get-tests", getTests).Methods("POST")
+	router.HandleFunc("/get-testsData", getTestsData).Methods("POST")
+	router.HandleFunc("/add-tests", addTests).Methods("POST")
+	router.HandleFunc("/delete-tests", deleteTests).Methods("POST")
+	router.HandleFunc("/get-docs", getDocs).Methods("POST")
+	router.HandleFunc("/add-docs", addDocs).Methods("POST")
+	router.HandleFunc("/delete-doc", deleteDoc).Methods("POST")
 
 	for {
 		log.Fatal(http.ListenAndServe(":8080", router))

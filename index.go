@@ -267,39 +267,44 @@ type applyHomeTask struct {
 }
 
 type addHomeTask struct {
-	Tag    string `json:"tag"`     // tag link
-	Docs   string `json:"docs"`    // docs list
-	Task   string `json:"task"`    // home task
-	Group  string `json:"group"`   // group link
-	Token  string `json:"token"`   // token
-	DateTo string `json:"date_to"` // finish date
+	Tag         string `json:"tag"`         // tag link
+	Docs        string `json:"docs"`        // docs list
+	Task        string `json:"task"`        // home task
+	Group       string `json:"group"`       // group link
+	Token       string `json:"token"`       // token
+	DateTo      string `json:"date_to"`     // finish date
+	Groups      string `json:"groups"`      // connected groups
+	Description string `json:"description"` // comment
 }
 
 type homeTask struct {
-	id         int    // Task id
-	groupID    int    // group id
-	tagID      int    // tag id
-	task       string // home task
-	dateTo     string // finish date
-	operatorID int    // user who create it
-	files      string // attached files
+	id          int    // Task id
+	groupID     int    // group id
+	tagID       int    // tag id
+	task        string // home task
+	dateTo      string // finish date
+	operatorID  int    // user who create it
+	files       string // attached files
+	description string // description
 }
 
 type homeData struct {
-	id       int // task id in database
-	taskID   int // link id to task
-	userID   int // user id who attached to it
-	finished int // mark.
+	id     int // task id in database
+	taskID int // link id to task
+	userID int // user id who attached to it
+	mark   int // mark.
 }
 
 type tests struct {
-	id         int    // id in database
-	groupID    int    // link to group
-	tagID      int    // link to tag
-	test       string // Task text
-	dateTo     string // finish task date
-	operatorID int    // who create it
-	docs       string // docs list
+	id          int    // id in database
+	groupID     int    // link to group
+	tagID       int    // link to tag
+	test        string // Task text
+	dateTo      string // finish task date
+	operatorID  int    // who create it
+	docs        string // docs list
+	groups      string // connected groups
+	description string // description
 }
 
 type testsData struct {
@@ -311,7 +316,7 @@ type testsData struct {
 
 type gDocs struct {
 	ID    string `json:"id"`
-	User  string `json:"user"`
+	Self  string `json:"self"`
 	Token string `josn:"token"`
 }
 
@@ -319,6 +324,12 @@ type aDocs struct {
 	Token      string `json:"token"`
 	Comment    string `json:"comment"`
 	Permission string `json:"permission"`
+}
+
+type changePermission struct {
+	ID         string `josn:"id"`
+	Permission string `json:"permission"`
+	Token      string `json:"token"`
 }
 
 type docs struct {
@@ -329,6 +340,7 @@ type docs struct {
 	date       string // date of upload
 	permission int    // permission
 	comment    string // comment to file
+	name       string // filename
 }
 
 var db *sql.DB                                             // Database interface
@@ -1397,6 +1409,14 @@ func deleteImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	localPath := strings.Split("/", path)
+
+	err = os.Remove(localdir + "/" + localPath[len(localPath)-1])
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
 	_, err = db.Query("delete from School.Images where path = ?", path)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -2128,10 +2148,10 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		fmt.Println(groupID)
 		result, err = db.Query("select * from School.Tasks where groupID = ? and operatorID = ?", groupID, user.id)
 	} else {
 		if ugroup != "0" {
+			fmt.Println(ugroup)
 			groupID, err = getGroupID(ugroup)
 			if err != nil {
 				log.Fatal(err.Error())
@@ -2140,10 +2160,12 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 		}
 		result, err = db.Query("select * from School.Tasks where groupID = ?", groupID)
 	}
-	if err != nil {
-		log.Fatal(err.Error())
-		return
-	}
+	/*
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+	*/
 
 	for result.Next() {
 
@@ -2283,7 +2305,7 @@ func getHomeTasks(w http.ResponseWriter, r *http.Request) {
 	if self != "0" {
 		result, err = db.Query("select * from School.HomeTasks where groupID = ? and operatorID = ?", groupID, user.id)
 	} else {
-		result, err = db.Query("select * from School.Hometasks where groupID = ?", groupID)
+		result, err = db.Query("select * from School.HomeTasks where groupID = ?", groupID)
 	}
 	if err != nil {
 		log.Fatal(err.Error())
@@ -2293,7 +2315,7 @@ func getHomeTasks(w http.ResponseWriter, r *http.Request) {
 	for result.Next() {
 
 		node := homeTask{}
-		err = result.Scan(&node.id, &node.groupID, &node.tagID, &node.task, &node.dateTo, &node.operatorID, &node.files)
+		err = result.Scan(&node.id, &node.groupID, &node.tagID, &node.task, &node.dateTo, &node.operatorID, &node.files, &node.description)
 
 		if err != nil {
 			log.Fatal(err.Error())
@@ -2325,8 +2347,9 @@ func getHomeTasks(w http.ResponseWriter, r *http.Request) {
 		temp["task"] = node.task
 		temp["date_to"] = node.dateTo
 		temp["operator"] = operator
-		temp["Docs"] = node.files
-		taskObj["tasks"] = append(taskObj["tasks"], temp)
+		temp["docs"] = node.files
+		temp["description"] = node.description
+		taskObj["tests"] = append(taskObj["tests"], temp)
 	}
 
 	json.NewEncoder(w).Encode(taskObj)
@@ -2401,6 +2424,8 @@ func getHomeData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println(id)
+
 	if all != "0" {
 		if user.status != "curator" {
 			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
@@ -2414,7 +2439,7 @@ func getHomeData(w http.ResponseWriter, r *http.Request) {
 	for result.Next() {
 
 		node := homeData{}
-		err = result.Scan(&node.id, &node.taskID, &node.userID, &node.finished)
+		err = result.Scan(&node.id, &node.taskID, &node.userID, &node.mark)
 
 		if err != nil {
 			log.Fatal(err.Error())
@@ -2437,8 +2462,8 @@ func getHomeData(w http.ResponseWriter, r *http.Request) {
 		temp["id"] = node.id
 		temp["task"] = tasks
 		temp["user"] = guser
-		temp["finished"] = node.finished
-		taskObj["tasks"] = append(taskObj["tasks"], temp)
+		temp["mark"] = node.mark
+		taskObj["tests"] = append(taskObj["tests"], temp)
 	}
 
 	json.NewEncoder(w).Encode("succsess")
@@ -2564,6 +2589,7 @@ func getTests(w http.ResponseWriter, r *http.Request) {
 		self    string
 		form    gTasks
 		user    userNode
+		uGroup  string
 		taskObj = make(map[string][]map[string]interface{})
 		token   string
 		result  *sql.Rows
@@ -2578,6 +2604,7 @@ func getTests(w http.ResponseWriter, r *http.Request) {
 
 	self = form.Self
 	token = form.Token
+	uGroup = form.Group
 
 	user, err = checkToken(token)
 	if err != nil {
@@ -2585,10 +2612,18 @@ func getTests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groupID, err = getGroupID(user.group)
-	if err != nil {
-		log.Fatal(err.Error())
-		return
+	if uGroup != "0" {
+		groupID, err = getGroupID(uGroup)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+	} else {
+		groupID, err = getGroupID(user.group)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
 	}
 
 	if self != "0" {
@@ -2600,15 +2635,17 @@ func getTests(w http.ResponseWriter, r *http.Request) {
 	} else {
 		result, err = db.Query("select * from School.Tests where groupID = ?", groupID)
 	}
-	if err != nil {
-		log.Fatal(err.Error())
-		return
-	}
+	/*
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+	*/
 
 	for result.Next() {
 
 		node := tests{}
-		err = result.Scan(&node.id, &node.groupID, &node.tagID, &node.test, &node.dateTo, &node.operatorID, &node.docs)
+		err = result.Scan(&node.id, &node.groupID, &node.tagID, &node.test, &node.dateTo, &node.operatorID, &node.docs, &node.groups, &node.description)
 
 		if err != nil {
 			log.Fatal(err.Error())
@@ -2640,8 +2677,9 @@ func getTests(w http.ResponseWriter, r *http.Request) {
 		temp["test"] = node.test
 		temp["date_to"] = node.dateTo
 		temp["operator"] = operator
-		temp["Docs"] = node.docs
-		taskObj["tasks"] = append(taskObj["tasks"], temp)
+		temp["docs"] = node.docs
+		temp["description"] = node.description
+		taskObj["tests"] = append(taskObj["tests"], temp)
 	}
 
 	json.NewEncoder(w).Encode(taskObj)
@@ -2678,6 +2716,8 @@ func getTestsData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println(all, id)
+
 	if all != "0" {
 		if user.status != "curator" {
 			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
@@ -2691,14 +2731,14 @@ func getTestsData(w http.ResponseWriter, r *http.Request) {
 	for result.Next() {
 
 		node := homeData{}
-		err = result.Scan(&node.id, &node.taskID, &node.userID, &node.finished)
+		err = result.Scan(&node.id, &node.taskID, &node.userID, &node.mark)
 
 		if err != nil {
 			log.Fatal(err.Error())
 			return
 		}
 
-		tasks, err = getHomeTask(node.taskID)
+		tasks, err = getTest(node.taskID)
 		if err != nil {
 			log.Fatal(err.Error())
 			return
@@ -2714,8 +2754,8 @@ func getTestsData(w http.ResponseWriter, r *http.Request) {
 		temp["id"] = node.id
 		temp["test"] = tasks
 		temp["user"] = guser
-		temp["finished"] = node.finished
-		taskObj["tasks"] = append(taskObj["tasks"], temp)
+		temp["mark"] = node.mark
+		taskObj["tests"] = append(taskObj["tests"], temp)
 	}
 
 	json.NewEncoder(w).Encode("succsess")
@@ -2736,6 +2776,7 @@ func addTests(w http.ResponseWriter, r *http.Request) {
 		tagID      int
 		group      string
 		token      string
+		groups     string
 		dateTo     string
 		groupID    int
 		operatorID int
@@ -2749,6 +2790,7 @@ func addTests(w http.ResponseWriter, r *http.Request) {
 	group = form.Group
 	token = form.Token
 	dateTo = form.DateTo
+	groups = form.Groups
 
 	user, err = checkToken(token)
 	if err != nil {
@@ -2774,7 +2816,7 @@ func addTests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db.Query("insert into School.HomeTasks (`groupID`,`tagID`,`test`,`date_to`,`operatorID`, `files`) values (?,?,?,?,?,?)", groupID, tagID, task, dateTo, operatorID, docs)
+	_, err = db.Query("insert into School.HomeTasks (`groupID`,`tagID`,`test`,`date_to`,`operatorID`, `files`, `groups`) values (?,?,?,?,?,?,?)", groupID, tagID, task, dateTo, operatorID, docs, groups)
 	if err != nil {
 		json.NewEncoder(w).Encode(err.Error())
 		return
@@ -2842,6 +2884,7 @@ func getDocs(w http.ResponseWriter, r *http.Request) {
 
 	json.NewDecoder(r.Body).Decode(&form)
 
+	self = form.Self
 	id, _ = strconv.Atoi(form.ID)
 	token = form.Token
 
@@ -2851,18 +2894,17 @@ func getDocs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err = getNameID(user.name)
-	if err != nil {
-		log.Fatal(err.Error())
-		return
-	}
-
-	if self != "" {
+	if self != "0" {
 		if user.status != "curator" && user.status != "admin" {
 			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
 			return
 		}
-		result, err = db.Query("slect * from School.Docs where userID = ?", userID)
+		userID, err = getNameID(user.name)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+		result, err = db.Query("select * from School.Docs where userID = ?", userID)
 		if err != nil {
 			log.Fatal(err.Error())
 			return
@@ -2879,14 +2921,14 @@ func getDocs(w http.ResponseWriter, r *http.Request) {
 		fatal := false
 		node := docs{}
 		doc := make(map[string]interface{})
-		err = result.Scan(&node.ID, &node.userID, &node.ext, &node.path, &node.date, &node.comment, &node.permission)
+		err = result.Scan(&node.ID, &node.ext, &node.path, &node.userID, &node.permission, &node.comment, &node.date, &node.name)
 		if err != nil {
 			log.Fatal(err.Error())
 			return
 		}
 		if node.permission == 0 {
 			if user.id != node.userID {
-				json.NewEncoder(w).Encode("РћС€РёР±РєР°. Р¤Р°Р№Р» СЏРІР»СЏРµС‚СЃСЏ РїСЂРёРІР°С‚РЅС‹Рј: Doc{id} = " + strconv.Itoa(node.ID))
+				json.NewEncoder(w).Encode("Файл не доступен для просмотра: Doc{id} = " + strconv.Itoa(node.ID))
 				fatal = true
 			}
 		}
@@ -2898,7 +2940,8 @@ func getDocs(w http.ResponseWriter, r *http.Request) {
 			doc["path"] = node.path
 			doc["date"] = node.date
 			doc["comment"] = node.comment
-			doc["permossion"] = node.permission
+			doc["permission"] = node.permission
+			doc["name"] = node.name
 			docsObj["docs"] = append(docsObj["docs"], doc)
 		}
 
@@ -2912,9 +2955,12 @@ func addDocs(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/text")
 
+	fmt.Println("Hello From docs")
+
 	var (
 		err        error
 		ext        string
+		name       string
 		path       string
 		user       userNode
 		token      string
@@ -2925,13 +2971,18 @@ func addDocs(w http.ResponseWriter, r *http.Request) {
 		userID int
 	)
 
-	extEnc, _ := hex.DecodeString(param["ext"])
+	ext = string(param["ext"])
+	name = string(param["name"])
 	token = param["token"]
-	commentEnc, _ := hex.DecodeString(param["comment"])
-	permission, _ = strconv.Atoi(param["permission"])
+	comment = string(param["comment"])
+	permission, _ = strconv.Atoi(string(param["permission"]))
 
-	ext = string(extEnc)
-	comment = string(commentEnc)
+	if ext == " " {
+		ext = ""
+	}
+	if comment == " " {
+		comment = ""
+	}
 
 	user, err = checkToken(token)
 	if err != nil {
@@ -2956,13 +3007,13 @@ func addDocs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(docfile) >= 5368709120 {
-		json.NewEncoder(w).Encode("Р Р°Р·РјРµСЂ С„Р°Р№Р»Р° СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕР№")
+		json.NewEncoder(w).Encode("Размер файла слишком велик")
 		return
 	}
 
 	hash := sha256.New()
 	hash.Write(docfile)
-	path = string(hash.Sum(nil))
+	path = string(hex.EncodeToString(hash.Sum(nil)))
 	exists := false
 	localfiles, _ := ioutil.ReadDir(docfiles)
 
@@ -2973,7 +3024,7 @@ func addDocs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if exists {
-		json.NewEncoder(w).Encode("РўР°РєРѕР№ С„Р°Р№Р» СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚")
+		json.NewEncoder(w).Encode("Подобный файл уже существует")
 		return
 	}
 
@@ -2983,7 +3034,55 @@ func addDocs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db.Query("insert into School.Docs (`ext`,`path`,`userID`,`permission`,`coment`)`", ext, "https://coded.life/school/docs/"+path, userID, permission, comment)
+	_, err = db.Query("insert into School.Docs (`ext`,`path`,`userID`,`permission`,`coment`,`date`,`name`) values (?,?,?,?,?,CURDATE(),?)", ext, "http://95.142.40.58/school/docs/"+path, userID, permission, comment, name)
+	if err != nil {
+		log.Fatal(err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode("succsess")
+
+}
+
+func changePermissions(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/text")
+
+	var (
+		id         int
+		err        error
+		form       changePermission
+		user       userNode
+		token      string
+		permission int
+		doc        docs
+	)
+
+	json.NewDecoder(r.Body).Decode(&form)
+
+	id, _ = strconv.Atoi(form.ID)
+	token = form.Token
+	permission, _ = strconv.Atoi(form.Permission)
+
+	user, err = checkToken(token)
+	if err != nil {
+		json.NewEncoder(w).Encode(err.Error())
+		return
+	}
+
+	if user.status != "curator" && user.status != "admin" {
+		json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+		return
+	}
+
+	err = db.QueryRow("select name, userID from School.Docs where userID = ?", user.id).Scan(&doc.name, &doc.userID)
+	fmt.Println(doc)
+	if user.id != doc.userID {
+		json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+		return
+	}
+
+	_, err = db.Query("update School.Docs set permission = ? where id = ?", permission, id)
 	if err != nil {
 		log.Fatal(err.Error())
 		return
@@ -3004,8 +3103,6 @@ func deleteDoc(w http.ResponseWriter, r *http.Request) {
 		form  dTask
 		user  userNode
 		token string
-		// special
-		cuser string
 	)
 
 	json.NewDecoder(r.Body).Decode(&form)
@@ -3019,22 +3116,27 @@ func deleteDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.QueryRow("select userID, permission form School.Docs where id = ?", id).Scan(&doc.userID, &doc.permission)
+	err = db.QueryRow("select id, name, userID, permission from School.Docs where id = ?", id).Scan(&doc.ID, &doc.name, &doc.userID, &doc.permission)
 
-	cuser, err = getName(doc.userID)
+	if doc.permission == 0 {
+		if user.status != "admin" {
+			if user.id != doc.userID {
+				fmt.Println(doc)
+				json.NewEncoder(w).Encode("У вас нет разрешений для этих действий. Doc {id} = " + strconv.Itoa(doc.ID))
+				return
+			}
+		}
+	}
+
+	localPath := strings.Split("/", doc.name)
+
+	err = os.Remove(docfiles + "/" + localPath[len(localPath)-1])
 	if err != nil {
 		log.Fatal(err.Error())
 		return
 	}
 
-	if doc.permission == 0 {
-		if user.name != cuser && user.status != "admin" {
-			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РјРѕР¶РµС‚Рµ СѓРґР°Р»РёС‚СЊ С„Р°Р№Р» Doc {id} = " + strconv.Itoa(doc.ID))
-			return
-		}
-	}
-
-	_, err = db.Query("delete from School.Doc where id = ?", id)
+	_, err = db.Query("delete from School.Docs where id = ?", id)
 	if err != nil {
 		log.Fatal(err.Error())
 		return
@@ -3118,10 +3220,11 @@ func main() {
 	router.HandleFunc("/add-tests", addTests).Methods("POST")
 	router.HandleFunc("/delete-tests", deleteTests).Methods("POST")
 	router.HandleFunc("/get-docs", getDocs).Methods("POST")
-	router.HandleFunc("/add-docs/{comment}/{permission}/{ext}/{token}", addDocs).Methods("POST")
-	router.HandleFunc("/delete-doc", deleteDoc).Methods("POST")
+	router.HandleFunc("/add-docs/{name}/{comment}/{permission}/{ext}/{token}", addDocs).Methods("POST")
+	router.HandleFunc("/change-permission", changePermissions).Methods("POST")
+	router.HandleFunc("/delete-docs", deleteDoc).Methods("POST")
 
-	for {
+	defer func() {
 		log.Fatal(http.ListenAndServe(":8080", router))
-	}
+	}()
 }

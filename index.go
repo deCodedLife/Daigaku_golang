@@ -353,7 +353,7 @@ var db *sql.DB                                             // Database interface
 var localimg []os.FileInfo                                 // var for list of files in local dir
 var localdir = "/var/www/html/school/img"                  // local dir for save images
 var docfiles = "/var/www/html/school/docs"                 // local dir for save docs
-var database = dataBase{"admin", "8895304025Dr", "School"} // Structure for init database
+var database = dataBase{"***", "***", "***"} // Structure for init database
 // letters for random
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 

@@ -3721,6 +3721,7 @@ func init() {
 	var err error
 	createDirectory(localdir)
 	localimg, err = ioutil.ReadDir(localdir)
+	
 	if err != nil {
 		log.Fatal(err.Error())
 		return
@@ -3734,12 +3735,13 @@ func init() {
 	for i := 0; i < len(dates); i++ {
 		date = date + dates[i] + "-"
 	}
-	f, err := os.OpenFile("logs/"+date+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 777)
+	
+	file, err := os.OpenFile("logs/log by "+date+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 777)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err)
 	}
-	wrt := io.MultiWriter(os.Stdout, f)
-	log.SetOutput(wrt)
+	write := io.MultiWriter(os.Stdout, file)
+	log.SetOutput(write)
 
 	log.Printf("Starting...")
 

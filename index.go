@@ -17,9 +17,11 @@ import (
 	"strings"
 	"time"
 
+	//"requests"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
-	"gopkg.in/h2non/bimg.v1"
+	//"gopkg.in/h2non/bimg.v1"
 )
 
 type dataBase struct {
@@ -71,7 +73,7 @@ type groupForm struct {
 
 // some data from `Images`
 type imageForm struct {
-	Tags  string `json:"tag"`   // Image tag. For example: "РРЅС„РѕСЂРјР°С‚РёРєР°" (varchar)
+	Tags  string `json:"tag"`   // Image tag. For example: "Р ВР Р…РЎвЂћР С•РЎР‚Р СР В°РЎвЂљР С‘Р С”Р В°" (varchar)
 	Path  string `json:"path"`  // Abstact image path
 	Token string `json:"token"` // Token
 }
@@ -353,7 +355,7 @@ var db *sql.DB                                             // Database interface
 var localimg []os.FileInfo                                 // var for list of files in local dir
 var localdir = "/var/www/html/school/img"                  // local dir for save images
 var docfiles = "/var/www/html/school/docs"                 // local dir for save docs
-var database = dataBase{"***", "***", "***"} // Structure for init database
+var database = dataBase{"admin", "8895304025Dr", "School"} // Structure for init database
 // letters for random
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
@@ -489,7 +491,7 @@ func getTagID(tag string) (int, error) {
 		Function get subject id from database using subject id
 		Return int with id and error
 		Example:
-		tag, err := getTagID("РђР»РіРµР±СЂР°")
+		tag, err := getTagID("Р С’Р В»Р С–Р ВµР В±РЎР‚Р В°")
 		log.Println(tag)
 	*/
 
@@ -573,7 +575,7 @@ func getHomeTaskID(task string) (int, error) {
 		Function get home task id from database using task name
 		Return int with id and error
 		Example:
-		task, err := getHomeTaskID("РўРµРѕСЂРёСЏ РёРЅС„РѕСЂРјР°С†РёРё РїСЂР°РєС‚РёРєР° 22")
+		task, err := getHomeTaskID("Р СћР ВµР С•РЎР‚Р С‘РЎРЏ Р С‘Р Р…РЎвЂћР С•РЎР‚Р СР В°РЎвЂ Р С‘Р С‘ Р С—РЎР‚Р В°Р С”РЎвЂљР С‘Р С”Р В° 22")
 		log.Println(task)
 	*/
 
@@ -615,7 +617,7 @@ func getTestID(task string) (int, error) {
 		Function get tests task id from database using task name
 		Return int with id and error
 		Example:
-		task, err := getTestID("РўРµРѕСЂРёСЏ РёРЅС„РѕСЂРјР°С†РёРё РєРѕРЅС‚СЂРѕР»СЊРЅР°СЏ 22")
+		task, err := getTestID("Р СћР ВµР С•РЎР‚Р С‘РЎРЏ Р С‘Р Р…РЎвЂћР С•РЎР‚Р СР В°РЎвЂ Р С‘Р С‘ Р С”Р С•Р Р…РЎвЂљРЎР‚Р С•Р В»РЎРЉР Р…Р В°РЎРЏ 22")
 		log.Println(task)
 	*/
 
@@ -693,10 +695,10 @@ func checkToken(token string) (userNode, error) {
 		return user, err
 	}
 	if getTime != date {
-		return user, errors.New("Токен устарел. Перезагрузите сессию")
+		return user, errors.New("РўРѕРєРµРЅ СѓСЃС‚Р°СЂРµР». РџРµСЂРµР·Р°РіСЂСѓР·РёС‚Рµ СЃРµСЃСЃРёСЋ")
 	}
 	if user.pass != pass {
-		return user, errors.New("Аунтификационные данные не верны")
+		return user, errors.New("РђСѓРЅС‚РёС„РёРєР°С†РёРѕРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ РЅРµ РІРµСЂРЅС‹")
 	}
 
 	return user, nil
@@ -758,7 +760,7 @@ func getAccess(w http.ResponseWriter, r *http.Request) {
 		_ = result.Scan(&user.id, &user.pass, &user.name, &user.status, &user.group, &user.isCurator, &user.profile, &user.curatorTag)
 		// Comparing
 		if summ != user.pass {
-			fmt.Fprintf(w, "Логин или пароль не верны")
+			fmt.Fprintf(w, "Р›РѕРіРёРЅ РёР»Рё РїР°СЂРѕР»СЊ РЅРµ РІРµСЂРЅС‹")
 			log.Printf("IP: " + getIP(r) + " | user: " + user.name + " try to login")
 			return
 		}
@@ -807,7 +809,7 @@ func addUser(w http.ResponseWriter, r *http.Request) {
 		token = form.Token
 
 		if group == "" {
-			json.NewEncoder(w).Encode("Вы должны указать группу")
+			json.NewEncoder(w).Encode("Р’С‹ РґРѕР»Р¶РЅС‹ СѓРєР°Р·Р°С‚СЊ РіСЂСѓРїРїСѓ")
 			return
 		}
 
@@ -819,13 +821,13 @@ func addUser(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "admin" && user.status != "curator" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
 		err = db.QueryRow("select name from School.users where name = ?", name).Scan(&temp)
 		if temp != "" {
-			json.NewEncoder(w).Encode("Пользователь уже существует")
+			json.NewEncoder(w).Encode("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚")
 			return
 		}
 
@@ -902,7 +904,7 @@ func addGroup(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "admin" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -942,7 +944,7 @@ func addImage(w http.ResponseWriter, r *http.Request) {
 			param   = mux.Vars(r)
 			err     error
 			date    string
-			utag    string // User tag. Example: "РРЅС„РѕСЂРјР°С‚РёРєР°"
+			utag    string // User tag. Example: "Р ВР Р…РЎвЂћР С•РЎР‚Р СР В°РЎвЂљР С‘Р С”Р В°"
 			path    string // Image path in filesystem
 			tagID   int
 			splited []string
@@ -962,7 +964,7 @@ func addImage(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "updater" {
-			json.NewEncoder(w).Encode("У вас нет разрешений для этих действий")
+			json.NewEncoder(w).Encode("РЈ РІР°СЃ РЅРµС‚ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -994,7 +996,7 @@ func addImage(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if exist {
-			json.NewEncoder(w).Encode("Подобный файл уже существует")
+			json.NewEncoder(w).Encode("РџРѕРґРѕР±РЅС‹Р№ С„Р°Р№Р» СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚")
 			return
 		}
 		ioutil.WriteFile(localdir+"/"+user.group+"/"+path, image, 0777)
@@ -1054,7 +1056,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "updater" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -1126,7 +1128,7 @@ func addTag(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "admin" && user.status != "curator" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			fmt.Printf("IP: " + getIP(r) + " try to add tag. Token: " + token)
 			return
 		}
@@ -1152,7 +1154,7 @@ func addTag(w http.ResponseWriter, r *http.Request) {
 		err = db.QueryRow("select name from School.tags where groupID = ? and tag = ? and curatorID = ?", groupID, tagID, curatorID).Scan(tagName)
 
 		if tagName == tags {
-			json.NewEncoder(w).Encode("Предмет уже есть в этой группе")
+			json.NewEncoder(w).Encode("РџСЂРµРґРјРµС‚ СѓР¶Рµ РµСЃС‚СЊ РІ СЌС‚РѕР№ РіСЂСѓРїРїРµ")
 			return
 		}
 
@@ -1280,7 +1282,7 @@ func selectTask(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "student" && user.status != "updater" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -1324,7 +1326,7 @@ func applyTask(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "curator" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -1373,7 +1375,7 @@ func selectUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "curator" && user.status != "updater" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -1381,7 +1383,7 @@ func selectUsers(w http.ResponseWriter, r *http.Request) {
 		err = db.QueryRow("select attached from Schoo.Tasks where id = ?", id).Scan(attached)
 
 		if attached != "false" {
-			json.NewEncoder(w).Encode("Реферат уже назначен другому пользователю")
+			json.NewEncoder(w).Encode("Р РµС„РµСЂР°С‚ СѓР¶Рµ РЅР°Р·РЅР°С‡РµРЅ РґСЂСѓРіРѕРјСѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ")
 			return
 		}
 
@@ -1430,7 +1432,7 @@ func changeGroup(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "curator" && user.status != "updater" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -1438,7 +1440,7 @@ func changeGroup(w http.ResponseWriter, r *http.Request) {
 		err = db.QueryRow("select attached from Schoo.Tasks where id = ?", id).Scan(attached)
 
 		if attached != "false" {
-			json.NewEncoder(w).Encode("Реферат уже назначен другому пользователю")
+			json.NewEncoder(w).Encode("Р РµС„РµСЂР°С‚ СѓР¶Рµ РЅР°Р·РЅР°С‡РµРЅ РґСЂСѓРіРѕРјСѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ")
 			return
 		}
 
@@ -1482,7 +1484,7 @@ func deleteGroup(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "admin" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -1525,7 +1527,7 @@ func deleteImage(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "updater" && user.status != "admin" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -1581,7 +1583,7 @@ func deleteMessage(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "updater" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -1638,7 +1640,7 @@ func deleteTag(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "admin" && user.status != "curator" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -1687,7 +1689,7 @@ func deleteTask(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "curator" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -1731,7 +1733,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "admin" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -2046,7 +2048,7 @@ func getTags(w http.ResponseWriter, r *http.Request) {
 
 		if all != "0" {
 			if user.status != "admin" {
-				json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+				json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 				return
 			}
 			result, err = db.Query("select * from School.tags")
@@ -2211,7 +2213,7 @@ func getProfile(w http.ResponseWriter, r *http.Request) {
 		if username != "0" {
 
 			if user.status != "admin" && user.status != "curator" {
-				json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+				json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 				return
 			}
 
@@ -2492,13 +2494,13 @@ func uploadIco(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err.Error())
 			return
 		}
-
-		image, err = bimg.NewImage(image).Resize(256, 256)
-		if err != nil {
-			log.Fatal(err.Error())
-			return
-		}
-
+		/*
+			image, err = bimg.NewImage(image).Resize(256, 256)
+			if err != nil {
+				log.Fatal(err.Error())
+				return
+			}
+		*/
 		hash := sha256.New()
 		hash.Write([]byte(image))
 
@@ -2576,7 +2578,7 @@ func getHomeTasks(w http.ResponseWriter, r *http.Request) {
 
 		if self != "0" {
 			if user.status != "curator" {
-				json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+				json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 				return
 			}
 			result, err = db.Query("select * from School.HomeTasks where groupID = ? and operatorID = ?", groupID, user.id)
@@ -2664,7 +2666,7 @@ func deleteHomeTask(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "curator" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -2718,7 +2720,7 @@ func getHomeData(w http.ResponseWriter, r *http.Request) {
 
 		if all != "0" {
 			if user.status != "curator" {
-				json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+				json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 				return
 			}
 			result, err = db.Query("select * from School.HomeData where taskID = ? and userID = ?", id, user.id)
@@ -2864,7 +2866,7 @@ func updateHomeTasks(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "admin" && user.status != "curator" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -2930,7 +2932,7 @@ func applyHome(w http.ResponseWriter, r *http.Request) {
 
 		if user.status != "admin" {
 			if user.id != task.operatorID {
-				json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+				json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 				return
 			}
 		}
@@ -3006,7 +3008,7 @@ func getTests(w http.ResponseWriter, r *http.Request) {
 
 		if self != "0" {
 			if user.status != "curator" {
-				json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+				json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 				return
 			}
 			result, err = db.Query("select * from School.Tests where groupID = ? and operatorID = ?", groupID, user.id)
@@ -3104,7 +3106,7 @@ func getTestsData(w http.ResponseWriter, r *http.Request) {
 
 		if all != "0" {
 			if user.status != "curator" {
-				json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+				json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 				return
 			}
 			result, err = db.Query("select * from School.TestsData where taskID = ? and userID = ?", id, user.id)
@@ -3236,7 +3238,7 @@ func updateTests(w http.ResponseWriter, r *http.Request) {
 			description string
 		)
 
-		fmt.Println("何だよ")
+		fmt.Println("дЅ•гЃ г‚€")
 
 		json.NewDecoder(r.Body).Decode(&form)
 
@@ -3256,7 +3258,7 @@ func updateTests(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "admin" && user.status != "curator" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -3309,7 +3311,7 @@ func applyTests(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "curator" && user.status != "admin" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -3327,7 +3329,7 @@ func applyTests(w http.ResponseWriter, r *http.Request) {
 
 		if user.status != "admin" {
 			if user.id != task.operatorID {
-				json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+				json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 				return
 			}
 		}
@@ -3379,7 +3381,7 @@ func deleteTests(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "curator" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -3431,7 +3433,7 @@ func getDocs(w http.ResponseWriter, r *http.Request) {
 
 		if self != "0" {
 			if user.status != "curator" && user.status != "admin" {
-				json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+				json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 				return
 			}
 			userID, err = getNameID(user.name)
@@ -3463,7 +3465,7 @@ func getDocs(w http.ResponseWriter, r *http.Request) {
 			}
 			if node.permission == 0 {
 				if user.id != node.userID {
-					json.NewEncoder(w).Encode("Файл не доступен для просмотра: Doc{id} = " + strconv.Itoa(node.ID))
+					json.NewEncoder(w).Encode("Р¤Р°Р№Р» РЅРµ РґРѕСЃС‚СѓРїРµРЅ РґР»СЏ РїСЂРѕСЃРјРѕС‚СЂР°: Doc{id} = " + strconv.Itoa(node.ID))
 					fatal = true
 				}
 			}
@@ -3530,7 +3532,7 @@ func addDocs(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "admin" && user.status != "curator" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -3546,7 +3548,7 @@ func addDocs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(docfile) >= 5368709120 {
-			json.NewEncoder(w).Encode("Размер файла слишком велик")
+			json.NewEncoder(w).Encode("Р Р°Р·РјРµСЂ С„Р°Р№Р»Р° СЃР»РёС€РєРѕРј РІРµР»РёРє")
 			return
 		}
 
@@ -3563,7 +3565,7 @@ func addDocs(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if exists {
-			json.NewEncoder(w).Encode("Подобный файл уже существует")
+			json.NewEncoder(w).Encode("РџРѕРґРѕР±РЅС‹Р№ С„Р°Р№Р» СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚")
 			return
 		}
 
@@ -3616,14 +3618,14 @@ func changePermissions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if user.status != "curator" && user.status != "admin" {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
 		err = db.QueryRow("select name, userID from School.Docs where userID = ?", user.id).Scan(&doc.name, &doc.userID)
 		fmt.Println(doc)
 		if user.id != doc.userID {
-			json.NewEncoder(w).Encode("Вы не имеете разрешений для выполнения этих действий")
+			json.NewEncoder(w).Encode("Р’С‹ РЅРµ РёРјРµРµС‚Рµ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№")
 			return
 		}
 
@@ -3673,7 +3675,7 @@ func deleteDoc(w http.ResponseWriter, r *http.Request) {
 			if user.status != "admin" {
 				if user.id != doc.userID {
 					fmt.Println(doc)
-					json.NewEncoder(w).Encode("У вас нет разрешений для этих действий. Doc {id} = " + strconv.Itoa(doc.ID))
+					json.NewEncoder(w).Encode("РЈ РІР°СЃ РЅРµС‚ СЂР°Р·СЂРµС€РµРЅРёР№ РґР»СЏ СЌС‚РёС… РґРµР№СЃС‚РІРёР№. Doc {id} = " + strconv.Itoa(doc.ID))
 					return
 				}
 			}
@@ -3721,7 +3723,6 @@ func init() {
 	var err error
 	createDirectory(localdir)
 	localimg, err = ioutil.ReadDir(localdir)
-	
 	if err != nil {
 		log.Fatal(err.Error())
 		return
@@ -3735,13 +3736,12 @@ func init() {
 	for i := 0; i < len(dates); i++ {
 		date = date + dates[i] + "-"
 	}
-	
-	file, err := os.OpenFile("logs/log by "+date+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 777)
+	f, err := os.OpenFile("logs/"+date+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 777)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err)
 	}
-	write := io.MultiWriter(os.Stdout, file)
-	log.SetOutput(write)
+	wrt := io.MultiWriter(os.Stdout, f)
+	log.SetOutput(wrt)
 
 	log.Printf("Starting...")
 

@@ -18,14 +18,13 @@ import (
 	"time"
 	"github.com/deCodedLife/Daigaku_golang/apis"
 	"github.com/deCodedLife/Daigaku_golang/types"
+
 	//"requests"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	//"gopkg.in/h2non/bimg.v1"
 )
-
-types.Test()
 
 type dataBase struct {
 	user     string // Database user
@@ -3804,6 +3803,9 @@ func main() {
 	router.HandleFunc("/add-docs/{name}/{comment}/{permission}/{ext}/{token}", addDocs).Methods("POST")
 	router.HandleFunc("/change-permission", changePermissions).Methods("POST")
 	router.HandleFunc("/delete-docs", deleteDoc).Methods("POST")
+
+	types.coords()
+	apis.test()
 
 	defer func() {
 		log.Fatal(http.ListenAndServe(":8080", router))

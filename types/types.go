@@ -1,4 +1,4 @@
-package Types
+package types
 
 func someNew() int {
 	return 1

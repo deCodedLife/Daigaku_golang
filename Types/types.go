@@ -1,5 +1,9 @@
 package Types
 
-func Test() int {
+func someNew() int {
+	return 1
+}
+
+func coords() int {
 	return 0
 }
